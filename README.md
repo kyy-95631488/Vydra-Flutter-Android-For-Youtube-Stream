@@ -83,6 +83,6 @@ This project is licensed under the [MIT License](LICENSE).
 ## Contact
 For questions or support, reach out to us at:
 - Email: hendriansyahrizkysetiawan@gmail.com
-- GitHub Issues: [Create an Issue](https://github.com/username/Vydra-Flutter-Android-For-Youtube-Stream/issues)
+- GitHub Issues: [Create an Issue](https://github.com/kyy-95631488/Vydra-Flutter-Android-For-Youtube-Stream/issues)
 
 **Vydra** — As powerful as a Hydra, flexible for all your streaming needs!

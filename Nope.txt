@@ -2,3 +2,8 @@ flutter clean
 flutter pub cache clean
 flutter pub get
 flutter run
+
+flutter build apk --release
+
+& "C:\Program Files\Java\jdk-24\bin\keytool.exe" -list -v -alias
+ androiddebugkey -keystore "$env:USERPROFILE\.android\debug.keystore" -storepass android -keypass android
