@@ -12,6 +12,26 @@ class ApiManager {
     'AIzaSyCa7DdIH5Co3kDfiOUh7Zl6NZ_PmvUvRK4',
     'AIzaSyDVRCuQRMlaHkSFNc-2KdISm8AXk1wTLpU',
     'AIzaSyB0usqeFZ8GPCfcXvvtInkS5ZiWDgELRAA',
+    'AIzaSyC5ViUU74EEyBFhsKe0etCuWAtxnySWTDA',
+    'AIzaSyDnLtgk4FRo7DNdWK4p7FvHcYF2zDr0TYE',
+    'AIzaSyB5KghG1J8x0SlPY2MOwZf9pp0GBed7OV8',
+    'AIzaSyBp65Wk_j2nbPbFqYRrRuCU6vbb1eM0D-g',
+    'AIzaSyA8jzRYT7Guie0SC4EELp7eESDliBqq6AI',
+    'AIzaSyCLQwGy009AAGxxSEKHF6F_PsDz4oIRboY',
+    'AIzaSyAWgNa3zauPJI9tBn8Wc-Zx4_zx0MpvHcA',
+    'AIzaSyAkPYFXqhfjSofiOed5C9WlLROxr14IcY8',
+    'AIzaSyALbFtWFVHuXgxY5k1LxpuD43DOa4H5FiM',
+    'AIzaSyDifmxZe-kDnOy3f7NlV1kWJarA3gIHiho',
+    'AIzaSyARYHOHcxoCJmpOqUzGYWX2tO6zY1RRFKM',
+    'AIzaSyCCyMubc3A51AWR9PQhukd2qPUrqV1tsuM',
+    'AIzaSyBaZ4UDAGSzBMmF-mtTXnqnLor1TsVdf4M',
+    'AIzaSyDvvLqnXyfOakdyqMXVwQTsWlQP907pZnY',
+    'AIzaSyAJkWIimyOHYA-kQPBAXh6NtzuWVLRJfZk',
+    'AIzaSyAqtbVefX6CG3XCxCgwKAf5TUatNeKKfCQ',
+    'AIzaSyC6zXOquFxahG10W66oDV3dy77slqRbPfs',
+    'AIzaSyBd4bafltK1q9WdC9woQ0Mrr_Eo7_BHlO0',
+    'AIzaSyBCTT0DxM3CzVfoi4q5YlGghghENTbsT5A',
+    'AIzaSyALAwjBQEwEWsgEoBWk1OTydM9c5pea7MA'
     // Add more API keys as needed
   ];
 

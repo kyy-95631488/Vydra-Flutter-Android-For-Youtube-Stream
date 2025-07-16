@@ -519,11 +519,38 @@ class _VideoListScreenState extends State<VideoListScreen> {
     );
   }
 
+  // Add this helper function to format the duration
+  String _formatDuration(String duration) {
+    if (duration.isEmpty) return '';
+
+    try {
+      final regex = RegExp(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?');
+      final match = regex.firstMatch(duration);
+      if (match == null) return '';
+
+      final hours = int.tryParse(match.group(1) ?? '0') ?? 0;
+      final minutes = int.tryParse(match.group(2) ?? '0') ?? 0;
+      final seconds = int.tryParse(match.group(3) ?? '0') ?? 0;
+
+      if (hours > 0) {
+        return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+      } else if (minutes > 0) {
+        return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+      } else {
+        return '0:${seconds.toString().padLeft(2, '0')}';
+      }
+    } catch (e) {
+      return '';
+    }
+  }
+
+  // Modified _buildHighlightVideo
   Widget _buildHighlightVideo(dynamic video) {
     final thumbnail = video['snippet']['thumbnails']['high']['url'] ?? '';
     final title = video['snippet']['title'] ?? 'Untitled';
     final channel = video['snippet']['channelTitle'] ?? 'Unknown Channel';
     final videoId = video['id'] ?? '';
+    final duration = _formatDuration(video['contentDetails']['duration'] ?? '');
 
     return GestureDetector(
       onTap: () {
@@ -553,17 +580,42 @@ class _VideoListScreenState extends State<VideoListScreen> {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(12),
-              child: CachedNetworkImage(
-                imageUrl: thumbnail,
-                height: 200,
-                width: double.infinity,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  height: 200,
-                  color: Colors.grey[800],
-                  child: const Center(child: CircularProgressIndicator()),
-                ),
-                errorWidget: (context, url, error) => const Icon(Icons.error),
+              child: Stack(
+                children: [
+                  CachedNetworkImage(
+                    imageUrl: thumbnail,
+                    height: 200,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      height: 200,
+                      color: Colors.grey[800],
+                      child: const Center(child: CircularProgressIndicator()),
+                    ),
+                    errorWidget: (context, url, error) => const Icon(Icons.error),
+                  ),
+                  if (duration.isNotEmpty)
+                    Positioned(
+                      bottom: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.75),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          duration,
+                          style: const TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 12,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
             Padding(
@@ -600,11 +652,13 @@ class _VideoListScreenState extends State<VideoListScreen> {
     );
   }
 
+  // Modified _buildVideoCard
   Widget _buildVideoCard(dynamic video) {
     final thumbnail = video['snippet']['thumbnails']['medium']['url'] ?? '';
     final title = video['snippet']['title'] ?? 'Untitled';
     final channel = video['snippet']['channelTitle'] ?? 'Unknown Channel';
     final videoId = video['id'] ?? '';
+    final duration = _formatDuration(video['contentDetails']['duration'] ?? '');
 
     return GestureDetector(
       onTap: () {
@@ -637,18 +691,43 @@ class _VideoListScreenState extends State<VideoListScreen> {
                 topLeft: Radius.circular(12),
                 bottomLeft: Radius.circular(12),
               ),
-              child: CachedNetworkImage(
-                imageUrl: thumbnail,
-                width: 160,
-                height: 90,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  width: 160,
-                  height: 90,
-                  color: Colors.grey[800],
-                  child: const Center(child: CircularProgressIndicator()),
-                ),
-                errorWidget: (context, url, error) => const Icon(Icons.error),
+              child: Stack(
+                children: [
+                  CachedNetworkImage(
+                    imageUrl: thumbnail,
+                    width: 160,
+                    height: 90,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      width: 160,
+                      height: 90,
+                      color: Colors.grey[800],
+                      child: const Center(child: CircularProgressIndicator()),
+                    ),
+                    errorWidget: (context, url, error) => const Icon(Icons.error),
+                  ),
+                  if (duration.isNotEmpty)
+                    Positioned(
+                      bottom: 4,
+                      right: 4,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.75),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          duration,
+                          style: const TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 10,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
             Expanded(
@@ -687,10 +766,12 @@ class _VideoListScreenState extends State<VideoListScreen> {
     );
   }
 
+  // Modified _buildShortsCard
   Widget _buildShortsCard(dynamic video) {
     final thumbnail = video['snippet']['thumbnails']['medium']['url'] ?? '';
     final title = video['snippet']['title'] ?? 'Untitled';
     final videoId = video['id'] ?? '';
+    final duration = _formatDuration(video['contentDetails']['duration'] ?? '');
 
     return GestureDetector(
       onTap: () {
@@ -734,6 +815,27 @@ class _VideoListScreenState extends State<VideoListScreen> {
                 ),
                 errorWidget: (context, url, error) => const Icon(Icons.error),
               ),
+              if (duration.isNotEmpty)
+                Positioned(
+                  bottom: 36, // Adjusted to avoid overlapping with title
+                  right: 4,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.75),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      duration,
+                      style: const TextStyle(
+                        fontFamily: 'Poppins',
+                        fontSize: 10,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ),
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(

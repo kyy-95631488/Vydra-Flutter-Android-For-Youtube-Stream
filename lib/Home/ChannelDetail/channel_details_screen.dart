@@ -5,6 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:http/http.dart' as http;
 import 'package:vydra/Auth/Api/api_manager.dart';
 import 'package:vydra/Auth/Service/auth_service.dart';
+import 'package:vydra/Home/ChannelDetail/Playlists/playlist_videos_screen.dart';
 import 'package:vydra/Home/VideoPlayer/video_player_screen.dart';
 import 'package:animate_do/animate_do.dart';
 
@@ -26,12 +27,16 @@ class _ChannelDetailsScreenState extends State<ChannelDetailsScreen> {
   Map<String, dynamic>? _channelDetails;
   List<dynamic> _videos = [];
   List<dynamic> _filteredVideos = [];
+  List<dynamic> _playlists = [];
+  List<dynamic> _filteredPlaylists = [];
   bool _isLoading = true;
   bool _isLoadingMore = false;
   bool _hasMoreVideos = true;
+  bool _hasMorePlaylists = true;
   bool _isSubscribed = false;
   String? _errorMessage;
-  String? _nextPageToken;
+  String? _nextPageTokenVideos;
+  String? _nextPageTokenPlaylists;
   String? _uploadsPlaylistId;
   String _searchQuery = '';
   final ApiManager _apiManager = ApiManager();
@@ -51,6 +56,7 @@ class _ChannelDetailsScreenState extends State<ChannelDetailsScreen> {
   Future<void> _initializeData() async {
     await _fetchChannelDetails();
     await _fetchUploadsPlaylistId();
+    await _fetchAllChannelPlaylists();
     await _fetchChannelVideos();
     await _checkSubscriptionStatus();
   }
@@ -116,6 +122,64 @@ class _ChannelDetailsScreenState extends State<ChannelDetailsScreen> {
     }
   }
 
+  Future<void> _fetchAllChannelPlaylists() async {
+    setState(() {
+      _isLoading = true;
+      _playlists.clear();
+    });
+
+    String? pageToken;
+    do {
+      await _fetchChannelPlaylists(pageToken: pageToken);
+      pageToken = _nextPageTokenPlaylists;
+    } while (pageToken != null && _hasMorePlaylists);
+
+    setState(() {
+      _isLoading = false;
+    });
+  }
+
+  Future<void> _fetchChannelPlaylists({String? pageToken}) async {
+    if (_isLoadingMore || !_hasMorePlaylists) return;
+
+    setState(() {
+      _isLoadingMore = pageToken != null;
+    });
+
+    try {
+      final url = Uri.parse(
+        'https://www.googleapis.com/youtube/v3/playlists?part=snippet,contentDetails&channelId=${widget.channelId}&maxResults=50${pageToken != null ? '&pageToken=$pageToken' : ''}&key=${_apiManager.currentApiKey}',
+      );
+
+      final data = await _apiManager.makeApiRequest(url);
+
+      setState(() {
+        final newPlaylists = (data['items'] ?? [])
+            .where((playlist) => playlist['id'] != _uploadsPlaylistId)
+            .toList();
+        if (pageToken == null) {
+          _playlists = newPlaylists;
+        } else {
+          _playlists.addAll(newPlaylists);
+        }
+        _nextPageTokenPlaylists = data['nextPageToken'];
+        _hasMorePlaylists = _nextPageTokenPlaylists != null && newPlaylists.isNotEmpty;
+        _updateFilteredPlaylists();
+        _isLoadingMore = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = 'Error fetching playlists: $e';
+        _isLoadingMore = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error fetching playlists: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _fetchChannelVideos({String? pageToken}) async {
     if (_isLoadingMore || !_hasMoreVideos || _uploadsPlaylistId == null) return;
 
@@ -132,19 +196,45 @@ class _ChannelDetailsScreenState extends State<ChannelDetailsScreen> {
         'https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&playlistId=$_uploadsPlaylistId&maxResults=50${pageToken != null ? '&pageToken=$pageToken' : ''}&key=${_apiManager.currentApiKey}',
       );
 
-      final data = await _apiManager.makeApiRequest(url);
+      final playlistData = await _apiManager.makeApiRequest(url);
+
+      // Extract video IDs
+      final videoIds = (playlistData['items'] ?? [])
+          .map((item) => item['snippet']['resourceId']['videoId'] as String)
+          .join(',');
+
+      // Fetch video details including duration
+      final videoDetailsUrl = Uri.parse(
+        'https://www.googleapis.com/youtube/v3/videos?part=contentDetails,snippet&id=$videoIds&key=${_apiManager.currentApiKey}',
+      );
+
+      final videoDetailsData = await _apiManager.makeApiRequest(videoDetailsUrl);
+
+      // Combine playlist items with video details
+      final videosWithDetails = (playlistData['items'] ?? []).asMap().entries.map((entry) {
+        final item = entry.value;
+        final videoDetail = (videoDetailsData['items'] ?? []).firstWhere(
+          (video) => video['id'] == item['snippet']['resourceId']['videoId'],
+          orElse: () => {},
+        );
+        return {
+          'snippet': item['snippet'],
+          'contentDetails': videoDetail['contentDetails'] ?? {},
+        };
+      }).toList();
 
       setState(() {
-        final newVideos = data['items'] ?? [];
         if (pageToken == null) {
-          _videos = newVideos;
+          _videos = videosWithDetails;
         } else {
-          _videos.addAll(newVideos);
+          _videos.addAll(videosWithDetails);
         }
-        _nextPageToken = data['nextPageToken'];
-        _hasMoreVideos = _nextPageToken != null && newVideos.isNotEmpty;
+        _nextPageTokenVideos = playlistData['nextPageToken'];
+        _hasMoreVideos = _nextPageTokenVideos != null && videosWithDetails.isNotEmpty;
         _updateFilteredVideos();
-        _isLoading = false;
+        if (pageToken == null) {
+          _isLoading = false;
+        }
         _isLoadingMore = false;
       });
     } catch (e) {
@@ -160,12 +250,33 @@ class _ChannelDetailsScreenState extends State<ChannelDetailsScreen> {
     }
   }
 
+  String _formatDuration(String? duration) {
+    if (duration == null) return '';
+    // Parse ISO 8601 duration (e.g., PT1H2M3S)
+    final regex = RegExp(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?');
+    final match = regex.firstMatch(duration);
+    if (match == null) return '';
+
+    final hours = int.tryParse(match.group(1) ?? '0') ?? 0;
+    final minutes = int.tryParse(match.group(2) ?? '0') ?? 0;
+    final seconds = int.tryParse(match.group(3) ?? '0') ?? 0;
+
+    if (hours > 0) {
+      return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    } else if (minutes > 0) {
+      return '${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    } else {
+      return '0:${seconds.toString().padLeft(2, '0')}';
+    }
+  }
+
   void _onScroll() {
     if (_scrollController.position.pixels >=
             _scrollController.position.maxScrollExtent - 200 &&
-        _hasMoreVideos &&
         !_isLoadingMore) {
-      _fetchChannelVideos(pageToken: _nextPageToken);
+      if (_hasMoreVideos) {
+        _fetchChannelVideos(pageToken: _nextPageTokenVideos);
+      }
     }
   }
 
@@ -173,6 +284,7 @@ class _ChannelDetailsScreenState extends State<ChannelDetailsScreen> {
     setState(() {
       _searchQuery = _searchController.text.trim();
       _updateFilteredVideos();
+      _updateFilteredPlaylists();
     });
   }
 
@@ -182,6 +294,17 @@ class _ChannelDetailsScreenState extends State<ChannelDetailsScreen> {
     } else {
       _filteredVideos = _videos.where((video) {
         final title = video['snippet']['title']?.toString().toLowerCase() ?? '';
+        return title.contains(_searchQuery.toLowerCase());
+      }).toList();
+    }
+  }
+
+  void _updateFilteredPlaylists() {
+    if (_searchQuery.isEmpty) {
+      _filteredPlaylists = List.from(_playlists);
+    } else {
+      _filteredPlaylists = _playlists.where((playlist) {
+        final title = playlist['snippet']['title']?.toString().toLowerCase() ?? '';
         return title.contains(_searchQuery.toLowerCase());
       }).toList();
     }
@@ -466,7 +589,8 @@ class _ChannelDetailsScreenState extends State<ChannelDetailsScreen> {
                                         const SizedBox(height: 8),
                                         Text(
                                           '${_formatNumber(_channelDetails?['statistics']?['subscriberCount'] ?? '0')} subscribers • '
-                                          '${_formatNumber(_channelDetails?['statistics']?['videoCount'] ?? '0')} videos',
+                                          '${_formatNumber(_channelDetails?['statistics']?['videoCount'] ?? '0')} videos • '
+                                          '${_playlists.length} playlists',
                                           style: TextStyle(
                                             fontFamily: 'Poppins',
                                             fontSize: 14,
@@ -571,10 +695,10 @@ class _ChannelDetailsScreenState extends State<ChannelDetailsScreen> {
                                         controller: _searchController,
                                         style: const TextStyle(
                                           fontFamily: 'Poppins',
-                                          color: Color(0xFF0A0A23), // Dark text for visibility
+                                          color: Color(0xFF0A0A23),
                                         ),
                                         decoration: InputDecoration(
-                                          hintText: 'Search videos...',
+                                          hintText: 'Search videos or playlists...',
                                           hintStyle: TextStyle(
                                             fontFamily: 'Poppins',
                                             color: Colors.grey[500],
@@ -606,7 +730,7 @@ class _ChannelDetailsScreenState extends State<ChannelDetailsScreen> {
                               FadeInUp(
                                 delay: const Duration(milliseconds: 200),
                                 child: const Text(
-                                  'Videos',
+                                  'All Videos',
                                   style: TextStyle(
                                     fontFamily: 'Poppins',
                                     fontSize: 24,
@@ -651,8 +775,10 @@ class _ChannelDetailsScreenState extends State<ChannelDetailsScreen> {
                       (context, index) {
                         final video = _filteredVideos[index];
                         final videoId = video['snippet']['resourceId']['videoId'];
-                        final thumbnail = video['snippet']['thumbnails']['high']['url'];
+                        final thumbnail = video['snippet']['thumbnails']['high']['url'] ??
+                            'https://via.placeholder.com/150';
                         final title = video['snippet']['title'];
+                        final duration = _formatDuration(video['contentDetails']['duration']);
 
                         return FadeInUp(
                           delay: Duration(milliseconds: 100 * (index % 10)),
@@ -710,6 +836,23 @@ class _ChannelDetailsScreenState extends State<ChannelDetailsScreen> {
                                             ),
                                           ),
                                         ),
+                                        if (duration.isNotEmpty)
+                                          Positioned(
+                                            bottom: 8,
+                                            right: 8,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              color: Colors.black54,
+                                              child: Text(
+                                                duration,
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontFamily: 'Poppins',
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
                                       ],
                                     ),
                                   ),
@@ -734,6 +877,159 @@ class _ChannelDetailsScreenState extends State<ChannelDetailsScreen> {
                         );
                       },
                       childCount: _filteredVideos.length,
+                    ),
+                  ),
+                ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+              child: FadeInUp(
+                delay: const Duration(milliseconds: 200),
+                child: const Text(
+                  'Playlists',
+                  style: TextStyle(
+                    fontFamily: 'Poppins',
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF0A0A23),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          _filteredPlaylists.isEmpty && !_isLoading
+              ? SliverToBoxAdapter(
+                  child: FadeInUp(
+                    duration: const Duration(milliseconds: 600),
+                    child: Center(
+                      child: Text(
+                        _searchQuery.isEmpty ? 'No playlists available for this channel.' : 'No playlists match your search.',
+                        style: TextStyle(
+                          fontFamily: 'Poppins',
+                          fontSize: 16,
+                          color: Colors.grey[600],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              : SliverPadding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  sliver: SliverGrid(
+                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: 2,
+                      crossAxisSpacing: 20,
+                      mainAxisSpacing: 20,
+                      childAspectRatio: 0.7,
+                    ),
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final playlist = _filteredPlaylists[index];
+                        final playlistId = playlist['id'];
+                        final thumbnail = playlist['snippet']['thumbnails']['high']['url'] ??
+                            'https://via.placeholder.com/150';
+                        final title = playlist['snippet']['title'];
+
+                        return FadeInUp(
+                          delay: Duration(milliseconds: 100 * (index % 10)),
+                          child: GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => PlaylistVideosScreen(
+                                    playlistId: playlistId,
+                                    playlistTitle: title,
+                                  ),
+                                ),
+                              );
+                            },
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.1),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 6),
+                                  ),
+                                ],
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                                    child: Stack(
+                                      children: [
+                                        CachedNetworkImage(
+                                          imageUrl: thumbnail,
+                                          width: double.infinity,
+                                          height: 140,
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, url) => Container(
+                                            width: double.infinity,
+                                            height: 140,
+                                            color: const Color(0xFFE0E0E0),
+                                          ),
+                                          errorWidget: (context, url, error) => const Icon(Icons.error, color: Colors.redAccent),
+                                        ),
+                                        Positioned.fill(
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              gradient: LinearGradient(
+                                                colors: [
+                                                  Colors.transparent,
+                                                  Colors.black.withOpacity(0.3),
+                                                ],
+                                                begin: Alignment.topCenter,
+                                                end: Alignment.bottomCenter,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                        Positioned(
+                                          bottom: 8,
+                                          right: 8,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            color: Colors.black54,
+                                            child: Text(
+                                              '${playlist['contentDetails']['itemCount']} videos',
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontFamily: 'Poppins',
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.all(12.0),
+                                    child: Text(
+                                      title,
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF0A0A23),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                      childCount: _filteredPlaylists.length,
                     ),
                   ),
                 ),
