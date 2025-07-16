@@ -21,25 +21,25 @@ jobs:
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.32.6'
+          flutter-version: '3.32.4'
 
       - name: Install dependencies
         run: flutter pub get
 
-      - name: Modify Podfile for Swift Compatibility
-        run: |
-          sed -i '' "s|use_frameworks!|use_frameworks! :linkage => :static|" ios/Podfile
-          # Sisipkan konfigurasi tambahan ke dalam post_install yang sudah ada
-          awk '/post_install do \|installer\|/ {print; print "  installer.pods_project.build_configurations.each do |config|\n    config.build_settings[\"SWIFT_EMIT_LOC_STRINGS\"] = \"NO\"\n    config.build_settings[\"OTHER_SWIFT_FLAGS\"] ||= [\"\"]\n    config.build_settings[\"OTHER_SWIFT_FLAGS\"] << \"-enable-experimental-feature\"\n    config.build_settings[\"OTHER_SWIFT_FLAGS\"] << \"AccessLevelOnImport\"\n  end"; next} 1' ios/Podfile > ios/Podfile.tmp
-          mv ios/Podfile.tmp ios/Podfile
+      # - name: Modify Podfile for Swift Compatibility
+      #   run: |
+      #     sed -i '' "s|use_frameworks!|use_frameworks! :linkage => :static|" ios/Podfile
+      #     # Sisipkan konfigurasi tambahan ke dalam post_install yang sudah ada
+      #     awk '/post_install do \|installer\|/ {print; print "  installer.pods_project.build_configurations.each do |config|\n    config.build_settings[\"SWIFT_EMIT_LOC_STRINGS\"] = \"NO\"\n    config.build_settings[\"OTHER_SWIFT_FLAGS\"] ||= [\"\"]\n    config.build_settings[\"OTHER_SWIFT_FLAGS\"] << \"-enable-experimental-feature\"\n    config.build_settings[\"OTHER_SWIFT_FLAGS\"] << \"AccessLevelOnImport\"\n  end"; next} 1' ios/Podfile > ios/Podfile.tmp
+      #     mv ios/Podfile.tmp ios/Podfile
 
-      - name: Install CocoaPods
-        run: |
-          cd ios
-          pod install
+      # - name: Install CocoaPods
+      #   run: |
+      #     cd ios
+      #     pod install
 
       - name: Build iOS
-        run: flutter build ipa --release --no-codesign --verbose
+        run: flutter build ipa --release --no-codesign
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
