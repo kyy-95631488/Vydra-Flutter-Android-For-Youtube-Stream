@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "449845039790",
+    "project_id": "vydra-740ad",
+    "storage_bucket": "vydra-740ad.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:449845039790:android:c49dff3e3316356168533f",
+        "android_client_info": {
+          "package_name": "com.hendriansyah.vydra"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "449845039790-rk9n4tesg5lvd4tferl5u3k1ung5g6sf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.hendriansyah.vydra",
+            "certificate_hash": "0864e899bf7c50be37a5fc1e2eadc8640e31faa6"
+          }
+        },
+        {
+          "client_id": "449845039790-fao74jjekau2sf40s442ml8nbq3md258.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBLkbIxNVR1YO8n7YhlVbcd9Ak-pUz1mws"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "449845039790-fao74jjekau2sf40s442ml8nbq3md258.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
