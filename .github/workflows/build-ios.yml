@@ -16,7 +16,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set Xcode version
-        run: sudo xcode-select -s /Applications/Xcode_16.app
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -25,6 +25,9 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+
+      - name: Check for outdated dependencies
+        run: flutter pub outdated
 
       - name: Update CocoaPods
         run: |
@@ -41,14 +44,18 @@ jobs:
           sed -i '' "s|use_frameworks!|use_frameworks! :linkage => :static|" ios/Podfile
           awk '/post_install do \|installer\|/ {print; print "  installer.pods_project.build_configurations.each do |config|\n    config.build_settings[\"SWIFT_EMIT_LOC_STRINGS\"] = \"NO\"\n    config.build_settings[\"OTHER_SWIFT_FLAGS\"] ||= [\"\"]\n    config.build_settings[\"OTHER_SWIFT_FLAGS\"] << \"-enable-experimental-feature\"\n    config.build_settings[\"OTHER_SWIFT_FLAGS\"] << \"AccessLevelOnImport\"\n  end"; next} 1' ios/Podfile > ios/Podfile.tmp
           mv ios/Podfile.tmp ios/Podfile
+          echo "pod 'FirebaseCoreInternal', '11.4.0'" >> ios/Podfile
 
       - name: Install CocoaPods
         run: |
           cd ios
           pod install
 
+      - name: Clear Flutter build cache
+        run: flutter clean
+
       - name: Build iOS
-        run: flutter build ipa --release --no-codesign
+        run: flutter build ipa --release --no-codesign --verbose
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
