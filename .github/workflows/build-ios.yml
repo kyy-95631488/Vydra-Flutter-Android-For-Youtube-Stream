@@ -9,7 +9,7 @@ on:
 jobs:
   build:
     name: Build IPA on macOS
-    runs-on: macos-	15.5
+    runs-on: macos-15.5
 
     steps:
       - name: Checkout code
