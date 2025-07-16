@@ -39,7 +39,7 @@ jobs:
           pod install
 
       - name: Build iOS
-        run: flutter build ipa --release --no-codesign
+        run: flutter build ipa --release --no-codesign --verbose
 
       - name: Upload IPA artifact
         uses: actions/upload-artifact@v4
