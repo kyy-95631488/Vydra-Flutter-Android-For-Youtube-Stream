@@ -1,19 +1,22 @@
 name: Build iOS App
 
 on:
-  workflow_dispatch: # bisa dipicu manual dari GitHub UI
+  workflow_dispatch:
   push:
     branches:
-      - main # atau cabang utama kamu
+      - main
 
 jobs:
   build:
     name: Build IPA on macOS
-    runs-on: macos-latest
+    runs-on: macos-14
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Set Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_15.3.app
 
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
@@ -22,6 +25,25 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+
+      - name: Install CocoaPods
+        run: |
+          cd ios
+          pod install
+
+      - name: Patch Firebase Swift build flags (experimental)
+        run: |
+          echo "Applying Swift build patch..."
+          sed -i '' 's|use_frameworks!|use_frameworks! :linkage => :static|' ios/Podfile
+          echo "post_install do |installer|
+            installer.pods_project.build_configurations.each do |config|
+              config.build_settings['SWIFT_EMIT_LOC_STRINGS'] = 'NO'
+              config.build_settings['OTHER_SWIFT_FLAGS'] ||= ['']
+              config.build_settings['OTHER_SWIFT_FLAGS'] << '-enable-experimental-feature'
+              config.build_settings['OTHER_SWIFT_FLAGS'] << 'AccessLevelOnImport'
+            end
+          end" >> ios/Podfile
+          cd ios && pod install
 
       - name: Build iOS
         run: flutter build ipa --release --no-codesign
