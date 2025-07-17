@@ -13,6 +13,7 @@
 migrate_working_dir/
 
 # google-services.json
+api_manager copy.dart
 
 # IntelliJ related
 *.iml
