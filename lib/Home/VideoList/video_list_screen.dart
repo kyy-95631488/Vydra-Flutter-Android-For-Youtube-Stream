@@ -4,9 +4,11 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:vydra/Component/NavBar/custom_bottom_navigation_bar.dart';
 import 'package:vydra/Home/VideoPlayer/video_player_screen.dart';
 import 'package:vydra/Auth/Service/auth_service.dart';
-import 'package:vydra/Auth/Api/api_manager.dart'; // Import the ApiManager class
+import 'package:vydra/Auth/Api/api_manager.dart';
+import 'package:vydra/Home/Settings/settings_screen.dart'; // Import the new SettingsScreen
 
 class VideoListScreen extends StatefulWidget {
   final User user;
@@ -32,6 +34,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
   String _searchQuery = '';
   final ScrollController _scrollController = ScrollController();
   final ApiManager _apiManager = ApiManager();
+  int _selectedIndex = 0;
 
   @override
   void initState() {
@@ -62,7 +65,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
     setState(() {
       _searchQuery = _searchController.text;
       if (_searchQuery.isEmpty) {
-        fetchUserVideos(); // Reset to original videos when search is cleared
+        fetchUserVideos();
       } else {
         searchVideos(_searchQuery);
       }
@@ -189,7 +192,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
       nextPageToken = data['nextPageToken'];
       final items = data['items'] ?? [];
       final videoIds = items
-          .where((item) => item['contentDetails']?['upload']?[' overId'] != null)
+          .where((item) => item['contentDetails']?['upload']?['videoId'] != null)
           .map((item) => item['contentDetails']['upload']['videoId'])
           .toList();
 
@@ -283,8 +286,11 @@ class _VideoListScreenState extends State<VideoListScreen> {
     try {
       final data = await _apiManager.makeApiRequest(url);
       nextPageToken = data['nextPageToken'];
+
       final videoIds = (data['items'] as List<dynamic>)
-          .map((item) => item['id']['videoId'])
+          .map((item) => item['id']?['videoId'])
+          .where((id) => id != null)
+          .cast<String>()
           .toList();
 
       if (videoIds.isEmpty) {
@@ -300,11 +306,12 @@ class _VideoListScreenState extends State<VideoListScreen> {
       }
 
       final videosUrl = Uri.parse(
-        'https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoIds.join(',')}&key=API_KEY',
+        'https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoIds.join(',')}&key=${_apiManager.currentApiKey}',
       );
 
       final videosData = await _apiManager.makeApiRequest(videosUrl);
       final videoList = videosData['items'] as List<dynamic>;
+
       final fetchedVideos = <dynamic>[];
       final fetchedShorts = <dynamic>[];
 
@@ -374,6 +381,28 @@ class _VideoListScreenState extends State<VideoListScreen> {
     }
   }
 
+  void _onNavItemTapped(int index) {
+    setState(() {
+      _selectedIndex = index;
+    });
+    switch (index) {
+      case 0:
+        // Home: Already on VideoListScreen
+        break;
+      case 1:
+        // Subscription: Placeholder for subscription screen
+        // Navigator.push(context, MaterialPageRoute(builder: (context) => SubscriptionScreen()));
+        break;
+      case 2:
+        // Settings: Navigate to settings screen
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => const SettingsScreen()),
+        );
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -409,7 +438,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
               ),
               SliverToBoxAdapter(
                 child: isLoading
-                    ? const Center(child: CircularProgressIndicator())
+                    ? const Center(child: ModernLoadingWidget())
                     : errorMessage != null
                         ? Padding(
                             padding: const EdgeInsets.all(16),
@@ -504,7 +533,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
                     } else if (isLoadingMore) {
                       return const Padding(
                         padding: EdgeInsets.all(16.0),
-                        child: Center(child: CircularProgressIndicator()),
+                        child: Center(child: ModernLoadingWidget()),
                       );
                     }
                     return null;
@@ -516,10 +545,13 @@ class _VideoListScreenState extends State<VideoListScreen> {
           ),
         ),
       ),
+      bottomNavigationBar: CustomBottomNavigationBar(
+        currentIndex: _selectedIndex,
+        onTap: _onNavItemTapped,
+      ),
     );
   }
 
-  // Add this helper function to format the duration
   String _formatDuration(String duration) {
     if (duration.isEmpty) return '';
 
@@ -544,7 +576,6 @@ class _VideoListScreenState extends State<VideoListScreen> {
     }
   }
 
-  // Modified _buildHighlightVideo
   Widget _buildHighlightVideo(dynamic video) {
     final thumbnail = video['snippet']['thumbnails']['high']['url'] ?? '';
     final title = video['snippet']['title'] ?? 'Untitled';
@@ -590,31 +621,31 @@ class _VideoListScreenState extends State<VideoListScreen> {
                     placeholder: (context, url) => Container(
                       height: 200,
                       color: Colors.grey[800],
-                      child: const Center(child: CircularProgressIndicator()),
+                      child: const Center(child: ModernLoadingWidget()),
                     ),
                     errorWidget: (context, url, error) => const Icon(Icons.error),
                   ),
-                  if (duration.isNotEmpty)
-                    Positioned(
-                      bottom: 8,
-                      right: 8,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.75),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          duration,
-                          style: const TextStyle(
-                            fontFamily: 'Poppins',
-                            fontSize: 12,
-                            color: Colors.white,
-                            fontWeight: FontWeight.w500,
+                  if (duration != null && duration.toString().isNotEmpty)
+                      Positioned(
+                        bottom: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.75),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            duration.toString(),
+                            style: const TextStyle(
+                              fontFamily: 'Poppins',
+                              fontSize: 12,
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                       ),
-                    ),
                 ],
               ),
             ),
@@ -652,7 +683,6 @@ class _VideoListScreenState extends State<VideoListScreen> {
     );
   }
 
-  // Modified _buildVideoCard
   Widget _buildVideoCard(dynamic video) {
     final thumbnail = video['snippet']['thumbnails']['medium']['url'] ?? '';
     final title = video['snippet']['title'] ?? 'Untitled';
@@ -702,7 +732,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
                       width: 160,
                       height: 90,
                       color: Colors.grey[800],
-                      child: const Center(child: CircularProgressIndicator()),
+                      child: const Center(child: ModernLoadingWidget()),
                     ),
                     errorWidget: (context, url, error) => const Icon(Icons.error),
                   ),
@@ -766,7 +796,6 @@ class _VideoListScreenState extends State<VideoListScreen> {
     );
   }
 
-  // Modified _buildShortsCard
   Widget _buildShortsCard(dynamic video) {
     final thumbnail = video['snippet']['thumbnails']['medium']['url'] ?? '';
     final title = video['snippet']['title'] ?? 'Untitled';
@@ -811,13 +840,13 @@ class _VideoListScreenState extends State<VideoListScreen> {
                   width: 120,
                   height: 200,
                   color: Colors.grey[800],
-                  child: const Center(child: CircularProgressIndicator()),
+                  child: const Center(child: ModernLoadingWidget()),
                 ),
                 errorWidget: (context, url, error) => const Icon(Icons.error),
               ),
               if (duration.isNotEmpty)
                 Positioned(
-                  bottom: 36, // Adjusted to avoid overlapping with title
+                  bottom: 36,
                   right: 4,
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -865,6 +894,94 @@ class _VideoListScreenState extends State<VideoListScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class ModernLoadingWidget extends StatefulWidget {
+  const ModernLoadingWidget({super.key});
+
+  @override
+  _ModernLoadingWidgetState createState() => _ModernLoadingWidgetState();
+}
+
+class _ModernLoadingWidgetState extends State<ModernLoadingWidget>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _scaleAnimation;
+  late Animation<double> _opacityAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      duration: const Duration(milliseconds: 1200),
+      vsync: this,
+    )..repeat(reverse: true);
+
+    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.2).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeInOut,
+      ),
+    );
+
+    _opacityAnimation = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeInOut,
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        return Transform.scale(
+          scale: _scaleAnimation.value,
+          child: Opacity(
+            opacity: _opacityAnimation.value,
+            child: Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.blueAccent,
+                    Colors.purpleAccent,
+                    Colors.pinkAccent,
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.blueAccent.withOpacity(0.4),
+                    blurRadius: 12,
+                    spreadRadius: 4,
+                  ),
+                ],
+              ),
+              child: const Center(
+                child: Icon(
+                  Icons.videocam,
+                  color: Colors.white,
+                  size: 32,
+                ),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }
