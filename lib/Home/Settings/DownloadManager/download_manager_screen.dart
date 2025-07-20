@@ -6,6 +6,9 @@ import 'package:open_filex/open_filex.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 import 'package:intl/intl.dart';
+import 'package:syncfusion_flutter_datepicker/datepicker.dart';
+import 'package:video_player/video_player.dart';
+import 'package:path/path.dart' as path;
 
 class DownloadManagerScreen extends StatefulWidget {
   const DownloadManagerScreen({super.key});
@@ -14,7 +17,8 @@ class DownloadManagerScreen extends StatefulWidget {
   State<DownloadManagerScreen> createState() => _DownloadManagerScreenState();
 }
 
-class _DownloadManagerScreenState extends State<DownloadManagerScreen> with SingleTickerProviderStateMixin {
+class _DownloadManagerScreenState extends State<DownloadManagerScreen>
+    with SingleTickerProviderStateMixin {
   List<FileSystemEntity> _mp3Files = [];
   List<FileSystemEntity> _mp4Files = [];
   List<FileSystemEntity> _filteredMp3Files = [];
@@ -46,7 +50,13 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen> with Sing
         });
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not access download directory')),
+            SnackBar(
+              content: Text(
+                'Could not access download directory',
+                style: GoogleFonts.poppins(color: Colors.white),
+              ),
+              backgroundColor: Colors.redAccent,
+            ),
           );
         }
         return;
@@ -56,15 +66,19 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen> with Sing
       final mp4Files = files.where((file) => file.path.endsWith('.mp4')).toList();
       final thumbnailPaths = <String, String?>{};
 
-      // Generate thumbnails for MP4 files
       for (var file in mp4Files) {
-        final thumbnailPath = await VideoThumbnail.thumbnailFile(
-          video: file.path,
-          imageFormat: ImageFormat.PNG,
-          maxHeight: 64,
-          quality: 75,
-        );
-        thumbnailPaths[file.path] = thumbnailPath;
+        try {
+          final thumbnailPath = await VideoThumbnail.thumbnailFile(
+            video: file.path,
+            imageFormat: ImageFormat.PNG,
+            maxHeight: 64,
+            quality: 75,
+          );
+          thumbnailPaths[file.path] = thumbnailPath;
+        } catch (e) {
+          thumbnailPaths[file.path] = null;
+          print('Failed to generate thumbnail for ${file.path}: $e');
+        }
       }
 
       setState(() {
@@ -81,7 +95,13 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen> with Sing
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading files: $e')),
+          SnackBar(
+            content: Text(
+              'Error loading files: $e',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
+            backgroundColor: Colors.redAccent,
+          ),
         );
       }
     }
@@ -93,7 +113,13 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen> with Sing
       if (!await file.exists()) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('File does not exist')),
+            SnackBar(
+              content: Text(
+                'File does not exist',
+                style: GoogleFonts.poppins(color: Colors.white),
+              ),
+              backgroundColor: Colors.redAccent,
+            ),
           );
         }
         return;
@@ -102,14 +128,26 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen> with Sing
       if (result.type != ResultType.done) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Error opening file: ${result.message}')),
+            SnackBar(
+              content: Text(
+                'Error opening file: ${result.message}',
+                style: GoogleFonts.poppins(color: Colors.white),
+              ),
+              backgroundColor: Colors.redAccent,
+            ),
           );
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error opening file: $e')),
+          SnackBar(
+            content: Text(
+              'Error opening file: $e',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
+            backgroundColor: Colors.redAccent,
+          ),
         );
       }
     }
@@ -121,7 +159,13 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen> with Sing
       if (!await file.exists()) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('File does not exist')),
+            SnackBar(
+              content: Text(
+                'File does not exist',
+                style: GoogleFonts.poppins(color: Colors.white),
+              ),
+              backgroundColor: Colors.redAccent,
+            ),
           );
         }
         return;
@@ -139,16 +183,200 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen> with Sing
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('File deleted successfully')),
+          SnackBar(
+            content: Text(
+              'File deleted successfully',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error deleting file: $e')),
+          SnackBar(
+            content: Text(
+              'Error deleting file: $e',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
+            backgroundColor: Colors.redAccent,
+          ),
         );
       }
     }
+  }
+
+  Future<void> _renameFile(String filePath, bool isMp3, String currentName) async {
+    String baseName = path.basenameWithoutExtension(currentName);
+    String extension = path.extension(filePath).toLowerCase();
+    TextEditingController _renameController = TextEditingController(text: baseName);
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.transparent,
+        content: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.grey[900],
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Rename File',
+                style: GoogleFonts.poppins(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 18,
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _renameController,
+                style: GoogleFonts.poppins(color: Colors.white),
+                decoration: InputDecoration(
+                  labelText: 'New file name',
+                  labelStyle: GoogleFonts.poppins(color: Colors.white70),
+                  filled: true,
+                  fillColor: Colors.grey[800],
+                  enabledBorder: OutlineInputBorder(
+                    borderSide: BorderSide(color: Colors.grey[700]!),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: const BorderSide(color: Colors.cyanAccent),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Extension: $extension',
+                style: GoogleFonts.poppins(
+                  color: Colors.white70,
+                  fontSize: 12,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: Text(
+                      'Cancel',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () async {
+                      String newName = _renameController.text.trim();
+                      if (newName.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'File name cannot be empty',
+                              style: GoogleFonts.poppins(color: Colors.white),
+                            ),
+                            backgroundColor: Colors.redAccent,
+                          ),
+                        );
+                        return;
+                      }
+
+                      try {
+                        final file = File(filePath);
+                        final directory = file.parent;
+                        final newFilePath = '${directory.path}/$newName$extension';
+                        if (await File(newFilePath).exists()) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'File with this name already exists',
+                                style: GoogleFonts.poppins(color: Colors.white),
+                              ),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                          return;
+                        }
+
+                        await file.rename(newFilePath);
+                        setState(() {
+                          if (isMp3) {
+                            _mp3Files.removeWhere((element) => element.path == filePath);
+                            _filteredMp3Files.removeWhere((element) => element.path == filePath);
+                            _mp3Files.add(File(newFilePath));
+                            _filteredMp3Files.add(File(newFilePath));
+                          } else {
+                            _mp4Files.removeWhere((element) => element.path == filePath);
+                            _filteredMp4Files.removeWhere((element) => element.path == filePath);
+                            _mp4Files.add(File(newFilePath));
+                            _filteredMp4Files.add(File(newFilePath));
+                            if (_thumbnailPaths.containsKey(filePath)) {
+                              _thumbnailPaths[newFilePath] = _thumbnailPaths[filePath];
+                              _thumbnailPaths.remove(filePath);
+                            }
+                          }
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'File renamed successfully',
+                              style: GoogleFonts.poppins(color: Colors.white),
+                            ),
+                            backgroundColor: Colors.green,
+                          ),
+                        );
+                        Navigator.pop(context);
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Error renaming file: $e',
+                              style: GoogleFonts.poppins(color: Colors.white),
+                            ),
+                            backgroundColor: Colors.redAccent,
+                          ),
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.cyanAccent,
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: Text(
+                      'Rename',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _filterFilesByDate() {
@@ -173,86 +401,224 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen> with Sing
     });
   }
 
-  void _showDateRangePicker() async {
-    final DateTimeRange? picked = await showDateRangePicker(
+  void _showDateRangePicker() {
+    showDialog(
       context: context,
-      firstDate: DateTime(2000),
-      lastDate: DateTime.now(),
-      initialDateRange: _selectedDateRange,
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.dark(
-              primary: Colors.blueAccent,
-              onPrimary: Colors.white,
-              surface: Color(0xFF1E293B),
-              onSurface: Colors.white,
-            ),
-            dialogBackgroundColor: const Color(0xFF1E293B),
-            textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(
-                foregroundColor: Colors.white,
-                textStyle: GoogleFonts.poppins(),
-              ),
-            ),
+      builder: (context) {
+        DateTimeRange? tempDateRange = _selectedDateRange;
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
           ),
-          child: Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+          backgroundColor: Colors.grey[900],
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            width: MediaQuery.of(context).size.width * 0.9,
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.75,
             ),
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                gradient: LinearGradient(
-                  colors: [const Color(0xFF1E293B), const Color(0xFF0F172A).withOpacity(0.9)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+            decoration: BoxDecoration(
+              color: Colors.grey[900],
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 ),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Select Date Range',
-                    style: GoogleFonts.poppins(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.calendar_today,
+                      color: Colors.cyanAccent,
+                      size: 24,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Select Date Range',
+                      style: GoogleFonts.poppins(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                if (tempDateRange != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    margin: const EdgeInsets.only(bottom: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[800],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${DateFormat('MMM dd, yyyy').format(tempDateRange.start)} - '
+                      '${DateFormat('MMM dd, yyyy').format(tempDateRange.end)}',
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  child!,
-                  const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      TextButton(
-                        onPressed: () {
+                const SizedBox(height: 16),
+                Flexible(
+                  child: SingleChildScrollView(
+                    child: SfDateRangePicker(
+                      onSelectionChanged: (DateRangePickerSelectionChangedArgs args) {
+                        if (args.value is PickerDateRange) {
+                          final PickerDateRange range = args.value;
+                          if (range.startDate != null && range.endDate != null) {
+                            tempDateRange = DateTimeRange(
+                              start: range.startDate!,
+                              end: range.endDate!,
+                            );
+                          }
+                        }
+                      },
+                      selectionMode: DateRangePickerSelectionMode.range,
+                      initialSelectedRange: _selectedDateRange != null
+                          ? PickerDateRange(
+                              _selectedDateRange!.start,
+                              _selectedDateRange!.end,
+                            )
+                          : null,
+                      startRangeSelectionColor: Colors.cyanAccent,
+                      endRangeSelectionColor: Colors.cyanAccent,
+                      rangeSelectionColor: Colors.cyanAccent.withOpacity(0.3),
+                      headerStyle: DateRangePickerHeaderStyle(
+                        textStyle: GoogleFonts.poppins(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                        backgroundColor: Colors.grey[850],
+                      ),
+                      monthCellStyle: DateRangePickerMonthCellStyle(
+                        textStyle: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.white70,
+                        ),
+                        todayTextStyle: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.cyanAccent,
+                        ),
+                        disabledDatesTextStyle: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.grey,
+                        ),
+                        weekendTextStyle: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.white70,
+                        ),
+                      ),
+                      yearCellStyle: DateRangePickerYearCellStyle(
+                        textStyle: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.white70,
+                        ),
+                        todayTextStyle: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.cyanAccent,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        disabledDatesTextStyle: GoogleFonts.poppins(
+                          fontSize: 14,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      minDate: DateTime(2000),
+                      maxDate: DateTime.now(),
+                      view: DateRangePickerView.month,
+                      enablePastDates: true,
+                      showNavigationArrow: true,
+                      navigationDirection: DateRangePickerNavigationDirection.horizontal,
+                      backgroundColor: Colors.grey[900],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _selectedDateRange = null;
+                          _filterFilesByDate();
+                        });
+                        Navigator.pop(context);
+                      },
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.redAccent,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(color: Colors.redAccent.withOpacity(0.3)),
+                        ),
+                      ),
+                      child: Text(
+                        'Clear Filter',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () {
+                        if (tempDateRange != null) {
                           setState(() {
-                            _selectedDateRange = null;
+                            _selectedDateRange = tempDateRange;
                             _filterFilesByDate();
                           });
-                          Navigator.pop(context);
-                        },
-                        child: const Text('Clear', style: TextStyle(color: Colors.redAccent)),
+                        }
+                        Navigator.pop(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.cyanAccent,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 2,
                       ),
-                    ],
-                  ),
-                ],
-              ),
+                      child: Text(
+                        'Apply',
+                        style: GoogleFonts.poppins(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ),
         );
       },
     );
+  }
 
-    if (picked != null) {
-      setState(() {
-        _selectedDateRange = picked;
-        _filterFilesByDate();
-      });
-    }
+  void _showVideoPreview(String filePath, String fileName) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return VideoPreviewDialog(filePath: filePath, fileName: fileName);
+      },
+    );
   }
 
   Widget _buildFileList(List<FileSystemEntity> files, bool isMp3) {
@@ -260,9 +626,10 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen> with Sing
       return Center(
         child: Text(
           isMp3 ? 'No audio files found' : 'No video files found',
-          style: GoogleFonts.inter(
+          style: GoogleFonts.poppins(
             fontSize: 16,
-            color: Colors.white.withOpacity(0.7),
+            color: Colors.white70,
+            fontWeight: FontWeight.w500,
           ),
         ),
       );
@@ -275,128 +642,197 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen> with Sing
         final fileName = file.path.split('/').last;
         final fileStat = (file as File).statSync();
         final fileDate = DateFormat('MMM dd, yyyy').format(fileStat.modified);
-        return Container(
+        return Card(
+          elevation: 2,
           margin: const EdgeInsets.only(bottom: 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E293B).withOpacity(0.9),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
           ),
-          child: ListTile(
-            leading: isMp3
-                ? Icon(
-                    Icons.audiotrack,
-                    color: Colors.white70,
-                  )
-                : _thumbnailPaths[file.path] != null
-                    ? ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.file(
-                          File(_thumbnailPaths[file.path]!),
-                          width: 48,
-                          height: 48,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Icon(
-                            Icons.videocam,
+          color: Colors.grey[900],
+          child: InkWell(
+            onTap: () => _openFile(file.path),
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[800],
+                      ),
+                      child: isMp3
+                          ? Icon(
+                              Icons.audiotrack,
+                              color: Colors.cyanAccent,
+                              size: 32,
+                            )
+                          : _thumbnailPaths[file.path] != null
+                              ? Image.file(
+                                  File(_thumbnailPaths[file.path]!),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) => Icon(
+                                    Icons.videocam,
+                                    color: Colors.cyanAccent,
+                                    size: 32,
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.videocam,
+                                  color: Colors.cyanAccent,
+                                  size: 32,
+                                ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          fileName,
+                          style: GoogleFonts.poppins(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          file.path,
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
                             color: Colors.white70,
                           ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                      )
-                    : Icon(
-                        Icons.videocam,
-                        color: Colors.white70,
-                      ),
-            title: Text(
-              fileName,
-              style: const TextStyle(
-                fontFamily: 'Poppins',
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  file.path,
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 12,
-                    color: Colors.white.withOpacity(0.7),
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  'Modified: $fileDate',
-                  style: TextStyle(
-                    fontFamily: 'Poppins',
-                    fontSize: 12,
-                    color: Colors.white.withOpacity(0.5),
-                  ),
-                ),
-              ],
-            ),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.play_arrow, color: Colors.white70),
-                  onPressed: () => _openFile(file.path),
-                  tooltip: 'Play',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete, color: Colors.redAccent),
-                  onPressed: () => showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      backgroundColor: const Color(0xFF1E293B),
-                      title: const Text(
-                        'Delete File',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontFamily: 'Poppins',
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      content: Text(
-                        'Are you sure you want to delete $fileName?',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
-                          fontFamily: 'Poppins',
-                        ),
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text(
-                            'Cancel',
-                            style: TextStyle(
-                              color: Colors.white70,
-                              fontFamily: 'Poppins',
-                            ),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            _deleteFile(file.path, isMp3);
-                            Navigator.pop(context);
-                          },
-                          child: const Text(
-                            'Delete',
-                            style: TextStyle(
-                              color: Colors.redAccent,
-                              fontFamily: 'Poppins',
-                            ),
+                        Text(
+                          'Modified: $fileDate',
+                          style: GoogleFonts.poppins(
+                            fontSize: 12,
+                            color: Colors.white70,
                           ),
                         ),
                       ],
                     ),
                   ),
-                  tooltip: 'Delete',
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Row(
+                        children: [
+                          if (!isMp3)
+                            _buildActionButton(
+                              icon: Icons.preview,
+                              color: Colors.blueAccent,
+                              onPressed: () => _showVideoPreview(file.path, fileName),
+                              tooltip: 'Preview',
+                            ),
+                          const SizedBox(width: 8),
+                          _buildActionButton(
+                            icon: Icons.play_arrow,
+                            color: Colors.cyanAccent,
+                            onPressed: () => _openFile(file.path),
+                            tooltip: 'Play',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          _buildActionButton(
+                            icon: Icons.edit,
+                            color: Colors.amberAccent,
+                            onPressed: () => _renameFile(file.path, isMp3, fileName),
+                            tooltip: 'Rename',
+                          ),
+                          const SizedBox(width: 8),
+                          _buildActionButton(
+                            icon: Icons.delete,
+                            color: Colors.redAccent,
+                            onPressed: () => showDialog(
+                              context: context,
+                              builder: (context) => AlertDialog(
+                                backgroundColor: Colors.grey[900],
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                content: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Delete File',
+                                      style: GoogleFonts.poppins(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w600,
+                                        fontSize: 18,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Text(
+                                      'Are you sure you want to delete $fileName?',
+                                      style: GoogleFonts.poppins(
+                                        color: Colors.white70,
+                                        fontSize: 14,
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.end,
+                                      children: [
+                                        TextButton(
+                                          onPressed: () => Navigator.pop(context),
+                                          child: Text(
+                                            'Cancel',
+                                            style: GoogleFonts.poppins(
+                                              color: Colors.white70,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        ElevatedButton(
+                                          onPressed: () {
+                                            _deleteFile(file.path, isMp3);
+                                            Navigator.pop(context);
+                                          },
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: Colors.redAccent,
+                                            foregroundColor: Colors.white,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(12),
+                                            ),
+                                          ),
+                                          child: Text(
+                                            'Delete',
+                                            style: GoogleFonts.poppins(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            tooltip: 'Delete',
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -404,42 +840,78 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen> with Sing
     );
   }
 
+  Widget _buildActionButton({
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+    required String tooltip,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onPressed, // ganti ini sesuai callback function kamu
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withOpacity(0.3)),
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 24,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: const Color(0xFF121212),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: Colors.grey[900],
         elevation: 0,
-        title: const Text(
+        title: Text(
           'Download Manager',
-          style: TextStyle(
-            fontFamily: 'Poppins',
-            fontSize: 20,
+          style: GoogleFonts.poppins(
+            fontSize: 22,
             fontWeight: FontWeight.w600,
             color: Colors.white,
           ),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          icon: const Icon(Icons.arrow_back, color: Colors.cyanAccent),
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list, color: Colors.white70),
+          _buildActionButton(
+            icon: Icons.filter_list,
+            color: Colors.cyanAccent,
             onPressed: _showDateRangePicker,
             tooltip: 'Filter by Date',
           ),
+          const SizedBox(width: 8),
         ],
         bottom: TabBar(
           controller: _tabController,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white.withOpacity(0.7),
-          indicatorColor: Colors.blueAccent,
-          labelStyle: const TextStyle(
-            fontFamily: 'Poppins',
+          labelColor: Colors.cyanAccent,
+          unselectedLabelColor: Colors.white70,
+          indicatorColor: Colors.cyanAccent,
+          indicatorWeight: 3,
+          labelStyle: GoogleFonts.poppins(
             fontSize: 16,
             fontWeight: FontWeight.w600,
+          ),
+          unselectedLabelStyle: GoogleFonts.poppins(
+            fontSize: 16,
+            fontWeight: FontWeight.w400,
           ),
           tabs: const [
             Tab(text: 'Audio'),
@@ -451,7 +923,12 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen> with Sing
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: _isLoading
-              ? const Center(child: CircularProgressIndicator(color: Colors.blueAccent))
+              ? Center(
+                  child: CircularProgressIndicator(
+                    color: Colors.cyanAccent,
+                    backgroundColor: Colors.white.withOpacity(0.2),
+                  ),
+                )
               : TabBarView(
                   controller: _tabController,
                   children: [
@@ -459,6 +936,180 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen> with Sing
                     _buildFileList(_filteredMp4Files, false),
                   ],
                 ),
+        ),
+      ),
+    );
+  }
+}
+
+class VideoPreviewDialog extends StatefulWidget {
+  final String filePath;
+  final String fileName;
+
+  const VideoPreviewDialog({super.key, required this.filePath, required this.fileName});
+
+  @override
+  _VideoPreviewDialogState createState() => _VideoPreviewDialogState();
+}
+
+class _VideoPreviewDialogState extends State<VideoPreviewDialog> {
+  late VideoPlayerController _controller;
+  bool _isInitialized = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.file(File(widget.filePath))
+      ..initialize().then((_) {
+        setState(() {
+          _isInitialized = true;
+        });
+        _controller.setLooping(false);
+        _controller.play();
+      }).catchError((error) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Error loading video preview: $error',
+                style: GoogleFonts.poppins(color: Colors.white),
+              ),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.grey[900],
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+      ),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: Colors.grey[900],
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    'Video Preview: ${widget.fileName}',
+                    style: GoogleFonts.poppins(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.redAccent),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            _isInitialized
+                ? AspectRatio(
+                    aspectRatio: _controller.value.aspectRatio,
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        VideoPlayer(_controller),
+                        if (!_controller.value.isPlaying)
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.5),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              Icons.play_arrow,
+                              color: Colors.cyanAccent,
+                              size: 40,
+                            ),
+                          ),
+                      ],
+                    ),
+                  )
+                : Center(
+                    child: CircularProgressIndicator(
+                      color: Colors.cyanAccent,
+                    ),
+                  ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildActionButton(
+                  icon: _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
+                  color: Colors.cyanAccent,
+                  onPressed: () {
+                    if (_isInitialized) {
+                      setState(() {
+                        _controller.value.isPlaying ? _controller.pause() : _controller.play();
+                      });
+                    }
+                  },
+                  tooltip: _controller.value.isPlaying ? 'Pause' : 'Play',
+                ),
+                const SizedBox(width: 16),
+                _buildActionButton(
+                  icon: Icons.close,
+                  color: Colors.redAccent,
+                  onPressed: () => Navigator.pop(context),
+                  tooltip: 'Close',
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required Color color,
+    required VoidCallback onPressed,
+    required String tooltip,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: onPressed,
+          child: Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withOpacity(0.3)),
+            ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 24,
+            ),
+          ),
         ),
       ),
     );

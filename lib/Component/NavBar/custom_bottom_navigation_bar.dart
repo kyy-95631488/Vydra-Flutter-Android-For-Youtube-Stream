@@ -58,8 +58,10 @@ class _CustomBottomNavigationBarState extends State<CustomBottomNavigationBar>
         child: BottomNavigationBar(
           currentIndex: widget.currentIndex,
           onTap: (index) {
-            widget.onTap(index);
-            _animationController.forward().then((_) => _animationController.reverse());
+            if (widget.currentIndex != index) {
+              widget.onTap(index);
+              _animationController.forward().then((_) => _animationController.reverse());
+            }
           },
           backgroundColor: Colors.transparent,
           elevation: 0,

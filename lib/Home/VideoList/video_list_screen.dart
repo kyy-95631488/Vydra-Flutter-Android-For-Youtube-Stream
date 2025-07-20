@@ -8,7 +8,8 @@ import 'package:vydra/Component/NavBar/custom_bottom_navigation_bar.dart';
 import 'package:vydra/Home/VideoPlayer/video_player_screen.dart';
 import 'package:vydra/Auth/Service/auth_service.dart';
 import 'package:vydra/Auth/Api/api_manager.dart';
-import 'package:vydra/Home/Settings/settings_screen.dart'; // Import the new SettingsScreen
+import 'package:vydra/Home/Settings/settings_screen.dart';
+import 'package:vydra/Home/Subscription/subscription_screen.dart';
 
 class VideoListScreen extends StatefulWidget {
   final User user;
@@ -40,7 +41,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
   void initState() {
     super.initState();
     _currentAccessToken = widget.accessToken;
-    fetchUserVideos();
+    _fetchVideosWithFallback();
     _scrollController.addListener(_onScroll);
     _searchController.addListener(_onSearchChanged);
   }
@@ -65,11 +66,23 @@ class _VideoListScreenState extends State<VideoListScreen> {
     setState(() {
       _searchQuery = _searchController.text;
       if (_searchQuery.isEmpty) {
-        fetchUserVideos();
+        _fetchVideosWithFallback();
       } else {
         searchVideos(_searchQuery);
       }
     });
+  }
+
+  Future<void> _fetchVideosWithFallback() async {
+    try {
+      await fetchUserVideos();
+    } catch (e) {
+      print('Failed to fetch user videos: $e');
+      await fetchDefaultVideos();
+      setState(() {
+        errorMessage = 'Failed to load personalized videos. Showing popular videos.';
+      });
+    }
   }
 
   Future<void> fetchUserVideos({String? pageToken}) async {
@@ -91,11 +104,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
       final allVideos = [...historyVideos, ...recommendedVideos];
 
       if (allVideos.isEmpty && pageToken == null) {
-        await fetchDefaultVideos();
-        setState(() {
-          errorMessage = 'No personalized videos found. Showing popular videos.';
-        });
-        return;
+        throw Exception('No personalized videos found.');
       }
 
       final fetchedVideos = <dynamic>[];
@@ -125,12 +134,12 @@ class _VideoListScreenState extends State<VideoListScreen> {
       });
     } catch (e) {
       print('Error fetching user videos: $e');
-      await fetchDefaultVideos(pageToken: pageToken);
       setState(() {
-        errorMessage = 'Error loading personalized videos: $e. Showing popular videos.';
+        errorMessage = 'Error loading personalized videos: $e';
         isLoading = false;
         isLoadingMore = false;
       });
+      rethrow;
     }
   }
 
@@ -139,7 +148,7 @@ class _VideoListScreenState extends State<VideoListScreen> {
       if (_searchQuery.isNotEmpty) {
         await searchVideos(_searchQuery, pageToken: nextPageToken);
       } else {
-        await fetchUserVideos(pageToken: nextPageToken);
+        await _fetchVideosWithFallback();
       }
     }
   }
@@ -364,41 +373,55 @@ class _VideoListScreenState extends State<VideoListScreen> {
   }
 
   Future<void> _refreshVideos() async {
-    _currentAccessToken = await _authService.getAccessToken();
-    if (_currentAccessToken == null) {
-      setState(() {
-        errorMessage = 'Please sign in again to refresh videos';
-        isLoading = false;
-      });
-      await fetchDefaultVideos();
-      return;
-    }
-    nextPageToken = null;
-    if (_searchQuery.isNotEmpty) {
-      await searchVideos(_searchQuery);
-    } else {
-      await fetchUserVideos();
-    }
+    setState(() {
+      nextPageToken = null;
+      videos = [];
+      shorts = [];
+      highlightVideoId = null;
+    });
+    await _fetchVideosWithFallback();
   }
 
   void _onNavItemTapped(int index) {
+    if (_selectedIndex == index) {
+      if (index == 0) {
+        _refreshVideos();
+      }
+      return;
+    }
+
     setState(() {
       _selectedIndex = index;
     });
+
     switch (index) {
       case 0:
-        // Home: Already on VideoListScreen
+        // Already on VideoListScreen, do nothing
         break;
       case 1:
-        // Subscription: Placeholder for subscription screen
-        // Navigator.push(context, MaterialPageRoute(builder: (context) => SubscriptionScreen()));
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SubscriptionScreen(
+              user: widget.user,
+              accessToken: _currentAccessToken ?? widget.accessToken,
+            ),
+          ),
+        ).then((_) {
+          setState(() {
+            _selectedIndex = 0;
+          });
+        });
         break;
       case 2:
-        // Settings: Navigate to settings screen
         Navigator.push(
           context,
           MaterialPageRoute(builder: (context) => const SettingsScreen()),
-        );
+        ).then((_) {
+          setState(() {
+            _selectedIndex = 0;
+          });
+        });
         break;
     }
   }
@@ -458,72 +481,83 @@ class _VideoListScreenState extends State<VideoListScreen> {
                               ],
                             ),
                           )
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (highlightVideoId != null)
-                                Padding(
-                                  padding: const EdgeInsets.all(16.0),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        _searchQuery.isEmpty ? 'Highlight Video' : 'Top Result',
-                                        style: const TextStyle(
-                                          fontFamily: 'Poppins',
-                                          fontSize: 22,
-                                          fontWeight: FontWeight.w700,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 12),
-                                      _buildHighlightVideo(videos[0]),
-                                    ],
+                        : videos.isEmpty && shorts.isEmpty
+                            ? const Padding(
+                                padding: EdgeInsets.all(16),
+                                child: Center(
+                                  child: Text(
+                                    'No videos available.',
+                                    style: TextStyle(color: Colors.white, fontSize: 16),
+                                    textAlign: TextAlign.center,
                                   ),
                                 ),
-                              if (shorts.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.all(16.0),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Shorts',
-                                        style: TextStyle(
-                                          fontFamily: 'Poppins',
-                                          fontSize: 22,
-                                          fontWeight: FontWeight.w700,
-                                          color: Colors.white,
-                                        ),
+                              )
+                            : Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (highlightVideoId != null && videos.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.all(16.0),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _searchQuery.isEmpty ? 'Highlight Video' : 'Top Result',
+                                            style: const TextStyle(
+                                              fontFamily: 'Poppins',
+                                              fontSize: 22,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          _buildHighlightVideo(videos[0]),
+                                        ],
                                       ),
-                                      const SizedBox(height: 12),
-                                      SizedBox(
-                                        height: 200,
-                                        child: ListView.builder(
-                                          scrollDirection: Axis.horizontal,
-                                          itemCount: shorts.length,
-                                          itemBuilder: (context, index) {
-                                            return _buildShortsCard(shorts[index]);
-                                          },
-                                        ),
+                                    ),
+                                  if (shorts.isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.all(16.0),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Text(
+                                            'Shorts',
+                                            style: TextStyle(
+                                              fontFamily: 'Poppins',
+                                              fontSize: 22,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 12),
+                                          SizedBox(
+                                            height: 200,
+                                            child: ListView.builder(
+                                              scrollDirection: Axis.horizontal,
+                                              itemCount: shorts.length,
+                                              itemBuilder: (context, index) {
+                                                return _buildShortsCard(shorts[index]);
+                                              },
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                    ],
+                                    ),
+                                  Padding(
+                                    padding: const EdgeInsets.all(16.0),
+                                    child: Text(
+                                      _searchQuery.isEmpty ? 'Videos' : 'Search Results',
+                                      style: const TextStyle(
+                                        fontFamily: 'Poppins',
+                                        fontSize: 22,
+                                        fontWeight: FontWeight.w700,
+                                        color: Colors.white,
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              Padding(
-                                padding: const EdgeInsets.all(16.0),
-                                child: Text(
-                                  _searchQuery.isEmpty ? 'Videos' : 'Search Results',
-                                  style: const TextStyle(
-                                    fontFamily: 'Poppins',
-                                    fontSize: 22,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                  ),
-                                ),
+                                ],
                               ),
-                            ],
-                          ),
               ),
               SliverList(
                 delegate: SliverChildBuilderDelegate(
@@ -577,11 +611,11 @@ class _VideoListScreenState extends State<VideoListScreen> {
   }
 
   Widget _buildHighlightVideo(dynamic video) {
-    final thumbnail = video['snippet']['thumbnails']['high']['url'] ?? '';
-    final title = video['snippet']['title'] ?? 'Untitled';
-    final channel = video['snippet']['channelTitle'] ?? 'Unknown Channel';
+    final thumbnail = video['snippet']?['thumbnails']?['high']?['url'] ?? '';
+    final title = video['snippet']?['title'] ?? 'Untitled';
+    final channel = video['snippet']?['channelTitle'] ?? 'Unknown Channel';
     final videoId = video['id'] ?? '';
-    final duration = _formatDuration(video['contentDetails']['duration'] ?? '');
+    final duration = _formatDuration(video['contentDetails']?['duration'] ?? '');
 
     return GestureDetector(
       onTap: () {
@@ -625,27 +659,27 @@ class _VideoListScreenState extends State<VideoListScreen> {
                     ),
                     errorWidget: (context, url, error) => const Icon(Icons.error),
                   ),
-                  if (duration != null && duration.toString().isNotEmpty)
-                      Positioned(
-                        bottom: 8,
-                        right: 8,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.75),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            duration.toString(),
-                            style: const TextStyle(
-                              fontFamily: 'Poppins',
-                              fontSize: 12,
-                              color: Colors.white,
-                              fontWeight: FontWeight.w500,
-                            ),
+                  if (duration.isNotEmpty)
+                    Positioned(
+                      bottom: 8,
+                      right: 8,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.75),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          duration,
+                          style: const TextStyle(
+                            fontFamily: 'Poppins',
+                            fontSize: 12,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w500,
                           ),
                         ),
                       ),
+                    ),
                 ],
               ),
             ),
@@ -684,11 +718,11 @@ class _VideoListScreenState extends State<VideoListScreen> {
   }
 
   Widget _buildVideoCard(dynamic video) {
-    final thumbnail = video['snippet']['thumbnails']['medium']['url'] ?? '';
-    final title = video['snippet']['title'] ?? 'Untitled';
-    final channel = video['snippet']['channelTitle'] ?? 'Unknown Channel';
+    final thumbnail = video['snippet']?['thumbnails']?['medium']?['url'] ?? '';
+    final title = video['snippet']?['title'] ?? 'Untitled';
+    final channel = video['snippet']?['channelTitle'] ?? 'Unknown Channel';
     final videoId = video['id'] ?? '';
-    final duration = _formatDuration(video['contentDetails']['duration'] ?? '');
+    final duration = _formatDuration(video['contentDetails']?['duration'] ?? '');
 
     return GestureDetector(
       onTap: () {
@@ -797,10 +831,10 @@ class _VideoListScreenState extends State<VideoListScreen> {
   }
 
   Widget _buildShortsCard(dynamic video) {
-    final thumbnail = video['snippet']['thumbnails']['medium']['url'] ?? '';
-    final title = video['snippet']['title'] ?? 'Untitled';
+    final thumbnail = video['snippet']?['thumbnails']?['medium']?['url'] ?? '';
+    final title = video['snippet']?['title'] ?? 'Untitled';
     final videoId = video['id'] ?? '';
-    final duration = _formatDuration(video['contentDetails']['duration'] ?? '');
+    final duration = _formatDuration(video['contentDetails']?['duration'] ?? '');
 
     return GestureDetector(
       onTap: () {
