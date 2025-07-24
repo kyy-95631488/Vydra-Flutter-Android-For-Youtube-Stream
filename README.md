@@ -1,6 +1,6 @@
-# Vydra: Flutter Android App for YouTube Streaming (Dummy Markdown)
+# Vydra: Flutter Android App for YouTube Streaming
 
-![Vydra Logo](https://via.placeholder.com/150?text=Vydra)
+![Vydra Logo](./assets/vydra-logo.png)
 
 **Vydra** (a fusion of "Video" and "Hydra") is a powerful, multi-featured Android application built with Flutter, designed to deliver a seamless and feature-rich YouTube streaming experience. Leveraging the YouTube Data API, Vydra enables users to explore, watch, and manage YouTube content with an intuitive interface and optimal performance.
 
@@ -11,12 +11,38 @@
 - **Responsive UI**: Modern Flutter-based design optimized for Android devices.
 - **Interactive Features**: Support for liking, commenting, and sharing videos for an engaging experience.
 - **Personalization**: Video recommendations based on user watch history.
+- **Firebase Integration**: Authentication and data management using Firebase.
+- **Offline Capabilities**: Cache videos and manage downloads with video_thumbnail and path_provider.
+- **Audio Playback**: Stream audio using audioplayers.
+- **Custom Animations**: Enhanced UI with animate_do and shimmer effects.
 
 ## Technologies Used
 - **Flutter**: UI framework for building responsive Android applications.
 - **YouTube Data API**: Fetches real-time video, channel, and playlist data.
 - **Dart**: Programming language for efficient app logic.
 - **REST API**: Integration with YouTube endpoints for streaming and interaction functionalities.
+- **Firebase**: Authentication and core services with firebase_core and firebase_auth.
+- **Google Sign-In**: Seamless login with google_sign_in.
+- **HTTP**: Network requests with http.
+- **Cached Network Image**: Efficient image loading with cached_network_image.
+- **YouTube Player Flutter**: Video playback with youtube_player_flutter.
+- **Shared Preferences**: Local storage with shared_preferences.
+- **Animate Do**: Animations with animate_do.
+- **Google Fonts**: Custom typography with google_fonts.
+- **Shimmer**: Loading effects with shimmer.
+- **Path Provider**: File management with path_provider.
+- **Share Plus**: Sharing capabilities with share_plus.
+- **Open Filex**: File opening with open_filex.
+- **Video Thumbnail**: Generate video thumbnails with video_thumbnail.
+- **Video Player**: Video playback with video_player.
+- **Connectivity Plus**: Network status with connectivity_plus.
+- **Intl**: Internationalization with intl.
+- **Syncfusion Flutter Datepicker**: Date picking with syncfusion_flutter_datepicker.
+- **Package Info Plus**: App info with package_info_plus.
+- **URL Launcher**: Launch URLs with url_launcher.
+- **Audioplayers**: Audio playback with audioplayers.
+- **Permission Handler**: Handle permissions with permission_handler.
+- **Particles Flutter**: Visual effects with particles_flutter.
 
 ## Prerequisites
 Before getting started, ensure you have:
@@ -24,7 +50,7 @@ Before getting started, ensure you have:
 - [Dart](https://dart.dev/get-dart) (included with Flutter)
 - [Android Studio](https://developer.android.com/studio) or another IDE for Flutter development
 - [YouTube Data API Key](https://developers.google.com/youtube/v3/getting-started) from Google Cloud Console
-- An Android device or emulator (API level 21 or higher)
+- [Firebase Project](https://firebase.google.com/) set up to obtain the `google-services.json` file
 
 ## Installation
 1. **Clone the Repository**
@@ -33,18 +59,25 @@ Before getting started, ensure you have:
    cd Vydra-Flutter-Android-For-Youtube-Stream
    ```
 
-2. **Install Dependencies**
+2. **Create a Firebase Project**
+   - Go to the [Firebase Console](https://console.firebase.google.com/) and create a new project.
+   - Add an Android app to your Firebase project and follow the instructions to download the `google-services.json` file.
+   - Place the `google-services.json` file in the `android/app` directory of your project.
+
+3. **Install Dependencies**
    ```bash
    flutter pub get
    ```
 
-3. **Configure API Key**
-   - Create a `lib/config.dart` file and add your YouTube API key:
-     ```dart
-     const String youtubeApiKey = 'YOUR_API_KEY_HERE';
-     ```
+4. **Clean the Project**
+   ```bash
+   flutter clean
+   ```
 
-4. **Run the App**
+5. **Configure API Key**
+   - Replace `YOUR_API_KEY_HERE` in `lib/api/api_manager.dart` with your valid YouTube API key.
+
+6. **Run the App**
    ```bash
    flutter run
    ```
@@ -55,10 +88,19 @@ Vydra-Flutter-Android-For-Youtube-Stream/
 ├── android/                # Android configuration
 ├── ios/                    # iOS configuration (optional)
 ├── lib/                    # Main source code
-│   ├── models/             # Data models (Video, Channel, Playlist)
-│   ├── screens/            # UI screens (Home, Search, Player)
-│   ├── services/           # YouTube API logic
-│   └── config.dart         # API key configuration
+│   ├── api/                # API manager (api_manager.dart, api_manager_copy.dart)
+│   ├── auth/               # Authentication service (auth_service.dart)
+│   ├── component/          # Navigation bar (custom_bottom_navigation_bar.dart, NavBar)
+│   ├── home/               # Home screen (AboutApp, about_screen.dart)
+│   ├── channelDetail/      # Channel details screen (channel_details_screen.dart)
+│   ├── playlists/          # Playlists screen (playlist_videos_screen.dart)
+│   ├── settings/           # Settings screen (checkUpdate, settings_screen.dart)
+│   ├── downloadManager/    # Download manager screen (download_manager_screen.dart)
+│   ├── subscription/       # Subscription screen (subscription_screen.dart)
+│   ├── videoList/          # Video list screen (video_list_screen.dart)
+│   ├── videoPlayer/        # Video player screen (video_player_screen.dart)
+│   ├── splashScreen/       # Splash screen (splash_screen.dart)
+│   └── main.dart           # Main entry point
 ├── pubspec.yaml            # Project dependencies
 └── README.md               # This documentation
 ```
@@ -68,6 +110,8 @@ Vydra-Flutter-Android-For-Youtube-Stream/
 2. **Watch Videos**: Tap a video to play it in the built-in player.
 3. **Manage Playlists**: Sign in with your Google account to create or edit playlists.
 4. **Interact**: Like, comment, or share videos directly from the app.
+5. **Settings**: Configure app preferences and check for updates.
+6. **Downloads**: Manage offline video downloads.
 
 ## Contributing
 We welcome contributions to make Vydra even better! Follow these steps:
@@ -76,9 +120,6 @@ We welcome contributions to make Vydra even better! Follow these steps:
 3. Make changes and commit: `git commit -m 'Add your-feature'`.
 4. Push to the branch: `git push origin your-feature`.
 5. Create a Pull Request on GitHub.
-
-## License
-This project is licensed under the [MIT License](LICENSE).
 
 ## Contact
 For questions or support, reach out to us at:
