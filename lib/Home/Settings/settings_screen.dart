@@ -8,6 +8,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'dart:async';
 import 'package:http/http.dart' as http;
+import 'package:vydra/Home/Settings/CheckUpdate/update_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -24,6 +25,8 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   bool _isPinging = false;
   late AnimationController _animationController;
   late Animation<double> _pulseAnimation;
+  final UpdateService _updateService = UpdateService();
+  bool _isCheckingUpdate = false;
 
   @override
   void initState() {
@@ -78,17 +81,41 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
   Future<void> _checkPing() async {
     if (_isPinging) return;
     setState(() => _isPinging = true);
-    
+
+    const String pingUrl = 'https://www.youtube.com'; // Using Cloudflare's DNS for reliable ping
+    const int maxAttempts = 3;
+    const Duration timeout = Duration(seconds: 5);
+    List<int> pingResults = [];
+
     try {
-      final stopwatch = Stopwatch()..start();
-      final response = await http.get(Uri.parse('https://www.youtube.com')).timeout(
-        const Duration(seconds: 5),
-        onTimeout: () => http.Response('Timeout', 408),
-      );
-      stopwatch.stop();
-      
+      for (int i = 0; i < maxAttempts; i++) {
+        final stopwatch = Stopwatch()..start();
+        try {
+          final response = await http.get(Uri.parse(pingUrl)).timeout(
+            timeout,
+            onTimeout: () => http.Response('Timeout', 408),
+          );
+          stopwatch.stop();
+          
+          if (response.statusCode == 200) {
+            pingResults.add(stopwatch.elapsedMilliseconds);
+          }
+        } catch (e) {
+          // Continue to next attempt on individual failure
+          continue;
+        }
+        // Small delay between attempts
+        await Future.delayed(const Duration(milliseconds: 200));
+      }
+
       setState(() {
-        _pingMs = response.statusCode == 200 ? stopwatch.elapsedMilliseconds : -1;
+        if (pingResults.isNotEmpty) {
+          // Calculate average ping
+          final averagePing = pingResults.reduce((a, b) => a + b) ~/ pingResults.length;
+          _pingMs = averagePing;
+        } else {
+          _pingMs = -1;
+        }
         _isPinging = false;
       });
     } catch (e) {
@@ -154,6 +181,80 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
     final domain = parts[1];
     if (username.length <= 3) return email;
     return '${username.substring(0, 3)}****@$domain';
+  }
+
+  Future<void> _checkForUpdate() async {
+    if (_isCheckingUpdate) return;
+    setState(() => _isCheckingUpdate = true);
+
+    final result = await _updateService.checkForUpdate();
+    setState(() => _isCheckingUpdate = false);
+
+    if (result['error'] != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result['error'])),
+      );
+      return;
+    }
+
+    if (result['hasUpdate']) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: const Color(0xFF1E293B),
+          title: const Text(
+            'Update Available',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          content: Text(
+            'A new version (${result['latestVersion']}) is available. Current version: ${result['currentVersion']}. Would you like to update?',
+            style: TextStyle(
+              fontFamily: 'Poppins',
+              color: Colors.white.withOpacity(0.7),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  color: Colors.white,
+                ),
+              ),
+            ),
+            TextButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                try {
+                  await _updateService.launchUpdateUrl(result['releaseUrl']);
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error opening update URL: $e')),
+                  );
+                }
+              },
+              child: const Text(
+                'Update',
+                style: TextStyle(
+                  fontFamily: 'Poppins',
+                  color: Colors.blue,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('You are using the latest version')),
+      );
+    }
   }
 
   @override
@@ -357,6 +458,44 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                 ),
               ),
               const SizedBox(height: 16),
+              // Check Update Button
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B).withOpacity(0.9),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                ),
+                child: ListTile(
+                  title: const Text(
+                    'Check for Update',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                  subtitle: Text(
+                    _isCheckingUpdate ? 'Checking for updates...' : 'Check for the latest version',
+                    style: TextStyle(
+                      fontFamily: 'Poppins',
+                      fontSize: 14,
+                      color: Colors.white.withOpacity(0.7),
+                    ),
+                  ),
+                  trailing: _isCheckingUpdate
+                      ? const CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        )
+                      : const Icon(
+                          Icons.update,
+                          color: Colors.white,
+                        ),
+                  onTap: _checkForUpdate,
+                ),
+              ),
+              const SizedBox(height: 16),
               // Clear Cache Button
               Container(
                 decoration: BoxDecoration(
@@ -410,7 +549,7 @@ class _SettingsScreenState extends State<SettingsScreen> with SingleTickerProvid
                     ),
                   ),
                   subtitle: Text(
-                    'Version 0.1.0\nCreated by @kyy-95631488 [https://github.com/kyy-95631488]',
+                    'Version 0.1.0\nCreated by @kyy-95631488 [ Github ]',
                     style: TextStyle(
                       fontFamily: 'Poppins',
                       fontSize: 14,

@@ -9,6 +9,8 @@ import 'package:intl/intl.dart';
 import 'package:syncfusion_flutter_datepicker/datepicker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:path/path.dart' as path;
+import 'package:audioplayers/audioplayers.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class DownloadManagerScreen extends StatefulWidget {
   const DownloadManagerScreen({super.key});
@@ -27,18 +29,52 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen>
   bool _isLoading = true;
   late TabController _tabController;
   DateTimeRange? _selectedDateRange;
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  String? _currentlyPlayingPath;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _loadDownloadedFiles();
+    _requestPermissions().then((_) => _loadDownloadedFiles());
+    _audioPlayer.onPlayerStateChanged.listen((state) {
+      if (state == PlayerState.completed) {
+        setState(() {
+          _currentlyPlayingPath = null;
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
     _tabController.dispose();
+    _audioPlayer.dispose();
     super.dispose();
+  }
+
+  Future<void> _requestPermissions() async {
+    Map<Permission, PermissionStatus> statuses = await [
+      Permission.storage,
+      if (Platform.isAndroid && await Permission.storage.isDenied)
+        Permission.manageExternalStorage,
+    ].request();
+
+    if (statuses[Permission.storage]!.isDenied ||
+        (Platform.isAndroid &&
+            statuses[Permission.manageExternalStorage]!.isDenied)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Storage permission denied. Cannot access files.',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _loadDownloadedFiles() async {
@@ -82,10 +118,12 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen>
       }
 
       setState(() {
-        _mp3Files = files.where((file) => file.path.endsWith('.mp3')).toList();
-        _mp4Files = mp4Files;
-        _filteredMp3Files = _mp3Files;
-        _filteredMp4Files = mp4Files;
+        _mp3Files = files.where((file) => file.path.endsWith('.mp3')).toList()
+          ..sort((a, b) => path.basename(a.path).compareTo(path.basename(b.path)));
+        _mp4Files = mp4Files
+          ..sort((a, b) => path.basename(a.path).compareTo(path.basename(b.path)));
+        _filteredMp3Files = List.from(_mp3Files);
+        _filteredMp4Files = List.from(_mp4Files);
         _thumbnailPaths = thumbnailPaths;
         _isLoading = false;
       });
@@ -144,6 +182,53 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen>
           SnackBar(
             content: Text(
               'Error opening file: $e',
+              style: GoogleFonts.poppins(color: Colors.white),
+            ),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _playAudio(String filePath) async {
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Audio file does not exist',
+                style: GoogleFonts.poppins(color: Colors.white),
+              ),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+        return;
+      }
+
+      if (_currentlyPlayingPath == filePath) {
+        await _audioPlayer.pause();
+        setState(() {
+          _currentlyPlayingPath = null;
+        });
+      } else {
+        if (_currentlyPlayingPath != null) {
+          await _audioPlayer.stop();
+        }
+        await _audioPlayer.play(DeviceFileSource(filePath));
+        setState(() {
+          _currentlyPlayingPath = filePath;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Error playing audio: $e',
               style: GoogleFonts.poppins(color: Colors.white),
             ),
             backgroundColor: Colors.redAccent,
@@ -318,19 +403,31 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen>
                         await file.rename(newFilePath);
                         setState(() {
                           if (isMp3) {
-                            _mp3Files.removeWhere((element) => element.path == filePath);
-                            _filteredMp3Files.removeWhere((element) => element.path == filePath);
-                            _mp3Files.add(File(newFilePath));
-                            _filteredMp3Files.add(File(newFilePath));
+                            final index = _mp3Files.indexWhere((element) => element.path == filePath);
+                            if (index != -1) {
+                              _mp3Files[index] = File(newFilePath);
+                            }
+                            final filteredIndex = _filteredMp3Files.indexWhere((element) => element.path == filePath);
+                            if (filteredIndex != -1) {
+                              _filteredMp3Files[filteredIndex] = File(newFilePath);
+                            }
+                            _mp3Files.sort((a, b) => path.basename(a.path).compareTo(path.basename(b.path)));
+                            _filteredMp3Files.sort((a, b) => path.basename(a.path).compareTo(path.basename(b.path)));
                           } else {
-                            _mp4Files.removeWhere((element) => element.path == filePath);
-                            _filteredMp4Files.removeWhere((element) => element.path == filePath);
-                            _mp4Files.add(File(newFilePath));
-                            _filteredMp4Files.add(File(newFilePath));
+                            final index = _mp4Files.indexWhere((element) => element.path == filePath);
+                            if (index != -1) {
+                              _mp4Files[index] = File(newFilePath);
+                            }
+                            final filteredIndex = _filteredMp4Files.indexWhere((element) => element.path == filePath);
+                            if (filteredIndex != -1) {
+                              _filteredMp4Files[filteredIndex] = File(newFilePath);
+                            }
                             if (_thumbnailPaths.containsKey(filePath)) {
                               _thumbnailPaths[newFilePath] = _thumbnailPaths[filePath];
                               _thumbnailPaths.remove(filePath);
                             }
+                            _mp4Files.sort((a, b) => path.basename(a.path).compareTo(path.basename(b.path)));
+                            _filteredMp4Files.sort((a, b) => path.basename(a.path).compareTo(path.basename(b.path)));
                           }
                         });
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -379,24 +476,93 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen>
     );
   }
 
+  void _showFileInfo(String filePath, String fileName) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[900],
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        content: Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.cyanAccent, size: 24),
+                  const SizedBox(width: 8),
+                  Text(
+                    'File Info',
+                    style: GoogleFonts.poppins(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 18,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Name: $fileName',
+                style: GoogleFonts.poppins(
+                  color: Colors.white70,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Location: $filePath',
+                style: GoogleFonts.poppins(
+                  color: Colors.white70,
+                  fontSize: 14,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 3,
+              ),
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: Text(
+                    'Close',
+                    style: GoogleFonts.poppins(
+                      color: Colors.cyanAccent,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _filterFilesByDate() {
     setState(() {
       if (_selectedDateRange == null) {
-        _filteredMp3Files = _mp3Files;
-        _filteredMp4Files = _mp4Files;
+        _filteredMp3Files = List.from(_mp3Files);
+        _filteredMp4Files = List.from(_mp4Files);
       } else {
         _filteredMp3Files = _mp3Files.where((file) {
           final fileStat = (file as File).statSync();
           final fileDate = fileStat.modified;
           return fileDate.isAfter(_selectedDateRange!.start.subtract(const Duration(days: 1))) &&
               fileDate.isBefore(_selectedDateRange!.end.add(const Duration(days: 1)));
-        }).toList();
+        }).toList()
+          ..sort((a, b) => path.basename(a.path).compareTo(path.basename(b.path)));
         _filteredMp4Files = _mp4Files.where((file) {
           final fileStat = (file as File).statSync();
           final fileDate = fileStat.modified;
           return fileDate.isAfter(_selectedDateRange!.start.subtract(const Duration(days: 1))) &&
               fileDate.isBefore(_selectedDateRange!.end.add(const Duration(days: 1)));
-        }).toList();
+        }).toList()
+          ..sort((a, b) => path.basename(a.path).compareTo(path.basename(b.path)));
       }
     });
   }
@@ -650,7 +816,7 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen>
           ),
           color: Colors.grey[900],
           child: InkWell(
-            onTap: () => _openFile(file.path),
+            onTap: () => isMp3 ? _playAudio(file.path) : _openFile(file.path),
             borderRadius: BorderRadius.circular(16),
             child: Padding(
               padding: const EdgeInsets.all(12),
@@ -667,7 +833,9 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen>
                       ),
                       child: isMp3
                           ? Icon(
-                              Icons.audiotrack,
+                              _currentlyPlayingPath == file.path
+                                  ? Icons.pause
+                                  : Icons.play_arrow,
                               color: Colors.cyanAccent,
                               size: 32,
                             )
@@ -723,114 +891,7 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen>
                     ),
                   ),
                   const SizedBox(width: 12),
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Row(
-                        children: [
-                          if (!isMp3)
-                            _buildActionButton(
-                              icon: Icons.preview,
-                              color: Colors.blueAccent,
-                              onPressed: () => _showVideoPreview(file.path, fileName),
-                              tooltip: 'Preview',
-                            ),
-                          const SizedBox(width: 8),
-                          _buildActionButton(
-                            icon: Icons.play_arrow,
-                            color: Colors.cyanAccent,
-                            onPressed: () => _openFile(file.path),
-                            tooltip: 'Play',
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          _buildActionButton(
-                            icon: Icons.edit,
-                            color: Colors.amberAccent,
-                            onPressed: () => _renameFile(file.path, isMp3, fileName),
-                            tooltip: 'Rename',
-                          ),
-                          const SizedBox(width: 8),
-                          _buildActionButton(
-                            icon: Icons.delete,
-                            color: Colors.redAccent,
-                            onPressed: () => showDialog(
-                              context: context,
-                              builder: (context) => AlertDialog(
-                                backgroundColor: Colors.grey[900],
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                content: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      'Delete File',
-                                      style: GoogleFonts.poppins(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w600,
-                                        fontSize: 18,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      'Are you sure you want to delete $fileName?',
-                                      style: GoogleFonts.poppins(
-                                        color: Colors.white70,
-                                        fontSize: 14,
-                                      ),
-                                      textAlign: TextAlign.center,
-                                    ),
-                                    const SizedBox(height: 16),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.end,
-                                      children: [
-                                        TextButton(
-                                          onPressed: () => Navigator.pop(context),
-                                          child: Text(
-                                            'Cancel',
-                                            style: GoogleFonts.poppins(
-                                              color: Colors.white70,
-                                              fontSize: 14,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        ElevatedButton(
-                                          onPressed: () {
-                                            _deleteFile(file.path, isMp3);
-                                            Navigator.pop(context);
-                                          },
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: Colors.redAccent,
-                                            foregroundColor: Colors.white,
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.circular(12),
-                                            ),
-                                          ),
-                                          child: Text(
-                                            'Delete',
-                                            style: GoogleFonts.poppins(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                            tooltip: 'Delete',
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
+                  _buildDropdownMenu(file.path, fileName, isMp3),
                 ],
               ),
             ),
@@ -840,34 +901,172 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen>
     );
   }
 
-  Widget _buildActionButton({
-    required IconData icon,
-    required Color color,
-    required VoidCallback onPressed,
-    required String tooltip,
-  }) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onPressed, // ganti ini sesuai callback function kamu
-          child: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: color.withOpacity(0.3)),
-            ),
-            child: Icon(
-              icon,
-              color: color,
-              size: 24,
+  Widget _buildDropdownMenu(String filePath, String fileName, bool isMp3) {
+    return PopupMenuButton<String>(
+      icon: Icon(
+        Icons.more_vert,
+        color: Colors.white70,
+        size: 24,
+      ),
+      color: Colors.grey[850],
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      offset: const Offset(0, 40),
+      elevation: 4,
+      itemBuilder: (context) => [
+        if (!isMp3)
+          PopupMenuItem(
+            value: 'preview',
+            child: _buildMenuItem(
+              icon: Icons.preview,
+              label: 'Preview',
+              color: Colors.blueAccent,
             ),
           ),
+        PopupMenuItem(
+          value: isMp3 ? 'play_external' : 'play',
+          child: _buildMenuItem(
+            icon: Icons.play_arrow,
+            label: isMp3 ? 'Play in External App' : 'Play',
+            color: Colors.cyanAccent,
+          ),
         ),
-      ),
+        PopupMenuItem(
+          value: 'info',
+          child: _buildMenuItem(
+            icon: Icons.info_outline,
+            label: 'Info',
+            color: Colors.greenAccent,
+          ),
+        ),
+        PopupMenuItem(
+          value: 'rename',
+          child: _buildMenuItem(
+            icon: Icons.edit,
+            label: 'Rename',
+            color: Colors.amberAccent,
+          ),
+        ),
+        PopupMenuItem(
+          value: 'delete',
+          child: _buildMenuItem(
+            icon: Icons.delete,
+            label: 'Delete',
+            color: Colors.redAccent,
+          ),
+        ),
+      ],
+      onSelected: (value) {
+        switch (value) {
+          case 'preview':
+            _showVideoPreview(filePath, fileName);
+            break;
+          case 'play':
+            _openFile(filePath);
+            break;
+          case 'play_external':
+            _openFile(filePath);
+            break;
+          case 'info':
+            _showFileInfo(filePath, fileName);
+            break;
+          case 'rename':
+            _renameFile(filePath, isMp3, fileName);
+            break;
+          case 'delete':
+            showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                backgroundColor: Colors.grey[900],
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Delete File',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Are you sure you want to delete $fileName?',
+                      style: GoogleFonts.poppins(
+                        color: Colors.white70,
+                        fontSize: 14,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: Text(
+                            'Cancel',
+                            style: GoogleFonts.poppins(
+                              color: Colors.white70,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () {
+                            _deleteFile(filePath, isMp3);
+                            Navigator.pop(context);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.redAccent,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(
+                            'Delete',
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+            break;
+        }
+      },
+    );
+  }
+
+  Widget _buildMenuItem({
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, color: color, size: 20),
+        const SizedBox(width: 8),
+        Text(
+          label,
+          style: GoogleFonts.poppins(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 
@@ -891,11 +1090,33 @@ class _DownloadManagerScreenState extends State<DownloadManagerScreen>
           onPressed: () => Navigator.pop(context),
         ),
         actions: [
-          _buildActionButton(
-            icon: Icons.filter_list,
-            color: Colors.cyanAccent,
-            onPressed: _showDateRangePicker,
-            tooltip: 'Filter by Date',
+          PopupMenuButton<String>(
+            icon: Icon(
+              Icons.filter_list,
+              color: Colors.cyanAccent,
+              size: 24,
+            ),
+            color: Colors.grey[850],
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            offset: const Offset(0, 40),
+            elevation: 4,
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'filter',
+                child: _buildMenuItem(
+                  icon: Icons.calendar_today,
+                  label: 'Filter by Date',
+                  color: Colors.cyanAccent,
+                ),
+              ),
+            ],
+            onSelected: (value) {
+              if (value == 'filter') {
+                _showDateRangePicker();
+              }
+            },
           ),
           const SizedBox(width: 8),
         ],

@@ -11,6 +11,7 @@ import 'package:vydra/Home/VideoPlayer/video_player_screen.dart';
 import 'package:vydra/Home/ChannelDetail/channel_details_screen.dart';
 import 'package:vydra/Component/NavBar/custom_bottom_navigation_bar.dart';
 import 'package:vydra/Home/VideoList/video_list_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // For caching
 
 class SubscriptionScreen extends StatefulWidget {
   final User user;
@@ -34,12 +35,21 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
   final ApiManager _apiManager = ApiManager();
   final ScrollController _scrollController = ScrollController();
   int _selectedIndex = 1;
+  late SharedPreferences _prefs; // For caching
+  static const String _cacheKeyChannels = 'cached_channels';
+  static const String _cacheKeyVideos = 'cached_videos';
 
   @override
   void initState() {
     super.initState();
-    fetchSubscriptions();
+    _initPrefs();
     _scrollController.addListener(_onScroll);
+  }
+
+  Future<void> _initPrefs() async {
+    _prefs = await SharedPreferences.getInstance();
+    await _loadCachedData();
+    await fetchSubscriptions();
   }
 
   @override
@@ -55,6 +65,23 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         nextPageToken != null) {
       fetchMoreVideos();
     }
+  }
+
+  Future<void> _loadCachedData() async {
+    final cachedChannels = _prefs.getString(_cacheKeyChannels);
+    final cachedVideos = _prefs.getString(_cacheKeyVideos);
+    if (cachedChannels != null && cachedVideos != null) {
+      setState(() {
+        channels = jsonDecode(cachedChannels);
+        videos = jsonDecode(cachedVideos);
+        isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _cacheData() async {
+    await _prefs.setString(_cacheKeyChannels, jsonEncode(channels));
+    await _prefs.setString(_cacheKeyVideos, jsonEncode(videos));
   }
 
   Future<void> fetchSubscriptions({String? pageToken}) async {
@@ -99,6 +126,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         }
       });
 
+      await _cacheData();
       await fetchSubscriptionVideos(pageToken: pageToken);
     } catch (e) {
       print('Error fetching subscriptions: $e');
@@ -129,18 +157,29 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           isLoading = false;
           isLoadingMore = false;
         });
+        await _cacheData();
         return;
       }
 
       List<dynamic> allVideos = [];
+      const int maxVideosPerChannel = 5; // Reduced to save quota
       for (String channelId in channelIds) {
+        // Check cache first
+        final cacheKey = 'videos_$channelId${pageToken ?? ''}';
+        final cachedVideos = _prefs.getString(cacheKey);
+        if (cachedVideos != null) {
+          allVideos.addAll(jsonDecode(cachedVideos));
+          continue;
+        }
+
         final url = Uri.parse(
-          'https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=10&order=date${pageToken != null ? '&pageToken=$pageToken' : ''}&type=video&channelId=$channelId&key=${_apiManager.currentApiKey}',
+          'https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=$maxVideosPerChannel&order=date${pageToken != null ? '&pageToken=$pageToken' : ''}&type=video&channelId=$channelId&key=${_apiManager.currentApiKey}',
         );
 
         final data = await _apiManager.makeApiRequest(url);
         final videoItems = data['items'] ?? [];
         allVideos.addAll(videoItems);
+        await _prefs.setString(cacheKey, jsonEncode(videoItems)); // Cache videos
       }
 
       final videoIds = allVideos
@@ -155,15 +194,23 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
           isLoading = false;
           isLoadingMore = false;
         });
+        await _cacheData();
         return;
       }
 
-      final videosUrl = Uri.parse(
-        'https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${videoIds.join(',')}&key=${_apiManager.currentApiKey}',
-      );
+      // Batch video details request
+      const int batchSize = 50; // Max IDs per request
+      List<dynamic> fetchedVideos = [];
+      for (int i = 0; i < videoIds.length; i += batchSize) {
+        final batchIds = videoIds.sublist(
+            i, i + batchSize > videoIds.length ? videoIds.length : i + batchSize);
+        final videosUrl = Uri.parse(
+          'https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails&id=${batchIds.join(',')}&key=${_apiManager.currentApiKey}',
+        );
 
-      final videosData = await _apiManager.makeApiRequest(videosUrl);
-      final fetchedVideos = videosData['items'] ?? [];
+        final videosData = await _apiManager.makeApiRequest(videosUrl);
+        fetchedVideos.addAll(videosData['items'] ?? []);
+      }
 
       fetchedVideos.sort((a, b) {
         final aDate = DateTime.parse(a['snippet']['publishedAt']);
@@ -180,6 +227,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
         isLoading = false;
         isLoadingMore = false;
       });
+      await _cacheData();
     } catch (e) {
       print('Error fetching subscription videos: $e');
       setState(() {
@@ -203,6 +251,7 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
       videos = [];
       selectedChannelId = null;
     });
+    await _prefs.clear(); // Clear cache on refresh
     await fetchSubscriptions();
   }
 
@@ -220,11 +269,9 @@ class _SubscriptionScreenState extends State<SubscriptionScreen> {
 
     switch (index) {
       case 0:
-        // Navigate back to VideoListScreen
         Navigator.pop(context);
         break;
       case 1:
-        // Already on SubscriptionScreen, do nothing
         break;
       case 2:
         Navigator.push(
