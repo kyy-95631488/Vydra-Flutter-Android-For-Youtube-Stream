@@ -64,21 +64,18 @@ Before getting started, ensure you have:
    - Add an Android app to your Firebase project and follow the instructions to download the `google-services.json` file.
    - Place the `google-services.json` file in the `android/app` directory of your project.
 
-3. **Install Dependencies**
-   ```bash
-   flutter pub get
-   ```
-
-4. **Clean the Project**
+3. **Clean the Project**
    ```bash
    flutter clean
+   flutter pub cache clean
    ```
 
-5. **Configure API Key**
+4. **Configure API Key**
    - Replace `YOUR_API_KEY_HERE` in `lib/api/api_manager.dart` with your valid YouTube API key.
 
-6. **Run the App**
+5. **Run the App**
    ```bash
+   flutter pub get
    flutter run
    ```
 
